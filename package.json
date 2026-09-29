@@ -1,0 +1,44 @@
+{
+  "name": "shaping-memory",
+  "version": "1.0.0",
+  "private": true,
+  "description": "塑忆 shaping-memory —— 自托管个人影像档案的 Monorepo（设计要求见 docs/塑忆产品设计方案.md）",
+  "license": "AGPL-3.0-only",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "overrides": {
+    "expo-font": "~13.0.4"
+  },
+  "scripts": {
+    "dev:web": "npm run dev -w @shaping-memory/web",
+    "dev:admin": "npm run dev -w @shaping-memory/admin",
+    "dev:api": "npm run dev -w @shaping-memory/api",
+    "build:web": "npm run build -w @shaping-memory/web",
+    "build:admin": "npm run build -w @shaping-memory/admin",
+    "build:api": "npm run build -w @shaping-memory/api",
+    "typecheck": "npm run typecheck:api && npm run typecheck:web && npm run typecheck:admin && npm run typecheck:mobile",
+    "typecheck:api": "npm run typecheck -w @shaping-memory/api",
+    "typecheck:web": "npm run typecheck -w @shaping-memory/web",
+    "typecheck:admin": "npm run typecheck -w @shaping-memory/admin",
+    "typecheck:mobile": "npm run typecheck -w @shaping-memory/mobile",
+    "start:mobile": "npm run start -w @shaping-memory/mobile",
+    "check:tokens": "node packages/design-tokens/scripts/check-tokens.mjs",
+    "build:cursors": "node packages/design-tokens/scripts/build-cursors.mjs",
+    "db:generate": "npm run generate -w @shaping-memory/db",
+    "db:migrate": "npm run migrate -w @shaping-memory/db",
+    "db:push": "npm run push -w @shaping-memory/db",
+    "db:seed": "npm run seed -w @shaping-memory/api",
+    "db:seed:catalog": "npm run seed:catalog -w @shaping-memory/api",
+    "db:clear": "npm run clear -w @shaping-memory/api --",
+    "import:photos": "npm run import -w @shaping-memory/api",
+    "backfill:place": "npm run backfill:place -w @shaping-memory/api",
+    "backfill:objects": "npm run backfill:objects -w @shaping-memory/api"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "playwright": "^1.63.0",
+    "tsx": "^4.19.2"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@shaping-memory/config",
+  "version": "1.0.0",
+  "private": true,
+  "description": "统一环境配置与校验（zod），后端与导入脚本共用同一份 AppConfig",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}

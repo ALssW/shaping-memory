@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "baseUrl": ".",
+    "paths": {
+      "@shaping-memory/config": ["../../packages/config/src/index.ts"],
+      "@shaping-memory/core": ["../../packages/core/src/index.ts"],
+      "@shaping-memory/db": ["../../packages/db/src/index.ts"],
+      "@shaping-memory/exif": ["../../packages/exif/src/index.ts"],
+      "@shaping-memory/image": ["../../packages/image/src/index.ts"],
+      "@shaping-memory/storage": ["../../packages/storage/src/index.ts"]
+    },
+    "noEmit": true
+  },
+  "include": ["src"]
+}

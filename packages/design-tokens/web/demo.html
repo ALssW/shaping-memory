@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<!--
+  packages/design-tokens/web/demo.html
+
+  Token 验证页：一个自包含、双击即可打开的最小页面。
+  不依赖任何外部资源，不联网，不引字体 CDN —— 只链接同目录的 tokens.css 与 theme.css。
+
+  其目的是验证 token 确实能生效，而非构建一个实际页面：
+    1) 玻璃面板（.mat-thick + .glass）
+    2) 一行 chip
+    3) 导航胶囊 + 圆形图标按钮（内联 SVG）
+    4) 用 elevation.neutral 的卡片
+    5) font.size.* 各档字号阶梯
+
+  注意：本文件里的所有颜色 / 尺寸仍优先引用 CSS 变量；只有「结构性的 1px 发丝线」
+  和「SVG 图标自身的绘制坐标」是直接写的，它们不属于设计 token 的范畴。
+-->
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Design Tokens 验证页</title>
+
+    <!-- 直接链接两个文件：这样用 file:// 双击打开时也不依赖 @import 的行为 -->
+    <link rel="stylesheet" href="./tokens.css" />
+    <link rel="stylesheet" href="./theme.css" />
+
+    <style>
+      /* ==================================================================
+         以下仅为验证页的布局，数值一律来自 token 变量
+         ================================================================== */
+
+      /* 铺一层 accent 光斑，模拟「照片透上来的光」，
+         好让玻璃面的 backdrop-filter 有东西可模糊（否则玻璃看起来就是色块）。
+         两个径向渐变的透明度分别取自 opacity.accent.border 与 wash。 */
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(
+            circle at 22% 10%,
+            color-mix(
+                in srgb,
+                var(--color-accent) calc(var(--opacity-accent-border) * 100%),
+                transparent
+              )
+              0%,
+            transparent 55%
+          ),
+          radial-gradient(
+            circle at 88% 80%,
+            color-mix(
+                in srgb,
+                var(--color-accent-secondary) calc(var(--opacity-accent-wash) * 100%),
+                transparent
+              )
+              0%,
+            transparent 50%
+          );
+      }
+
+      /* 内容压在光斑之上（--z-inset-decoration 就是「面内装饰层」那一档） */
+      main {
+        position: relative;
+        z-index: var(--z-inset-decoration);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-24);
+        padding: var(--space-32);
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-12);
+        flex-wrap: wrap;
+      }
+
+      /* ---- 例 1：玻璃面板 ------------------------------------------- */
+      .panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-12);
+        padding: var(--space-24);
+        border-radius: var(--radius-xl);
+      }
+
+      /* ---- 标题 ------------------------------------------------------ */
+      .h-heading {
+        font-size: var(--font-size-heading);
+        font-weight: var(--font-weight-semibold);
+        letter-spacing: var(--font-tracking-normal);
+      }
+      .h-sub {
+        font-family: var(--font-family-mono);
+        font-size: var(--font-size-label);
+        font-weight: var(--font-weight-semibold);
+        letter-spacing: var(--font-tracking-meta);
+        color: var(--color-text-secondary);
+      }
+
+      /* ---- chip ------------------------------------------------------ */
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        height: var(--size-chip);
+        padding: 0 var(--space-12);
+        border-radius: var(--radius-full);
+        font-size: var(--font-size-label);
+        color: var(--color-text-secondary);
+        background-color: var(--color-fill-secondary);
+      }
+      /* 选中态：accent 淡洗底 + accent 文字。无描边（规范 §1） */
+      .chip.is-on {
+        color: var(--color-accent);
+        background-color: color-mix(
+          in srgb,
+          var(--color-accent) calc(var(--opacity-accent-wash) * 100%),
+          transparent
+        );
+      }
+
+      /* ---- 导航胶囊 -------------------------------------------------- */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-4);
+        padding: var(--space-4);
+        border-radius: var(--radius-full);
+      }
+      .pill-item {
+        display: inline-flex;
+        align-items: center;
+        height: var(--size-button-sm);
+        padding: 0 var(--space-16);
+        border-radius: var(--radius-full);
+        font-size: var(--font-size-label);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-text-secondary);
+        text-decoration: none;
+        transition:
+          background-color var(--motion-duration-base) var(--motion-easing-smooth),
+          color var(--motion-duration-base) var(--motion-easing-smooth);
+      }
+      .pill-item:hover {
+        color: var(--color-text-base);
+        background-color: var(--color-fill-tertiary);
+      }
+      /* 激活态是少数允许 accent 实心填充的场合；accent 上的反白用背景色本身 */
+      .pill-item.is-active {
+        color: var(--color-background);
+        background-color: var(--color-accent);
+      }
+
+      /* ---- 圆形图标按钮 ---------------------------------------------- */
+      .icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--size-icon-button-default);
+        height: var(--size-icon-button-default);
+        border-radius: var(--radius-full);
+        color: var(--color-text-base);
+        background-color: var(--color-fill-tertiary);
+        cursor: pointer;
+        transition: background-color var(--motion-duration-base) var(--motion-easing-smooth);
+      }
+      .icon-btn:hover {
+        background-color: var(--color-fill-base);
+      }
+      /* 图标字形尺寸用 size.icon.default（18px），与 size.icon-button.default 配对 */
+      .icon-btn svg {
+        width: var(--size-icon-default);
+        height: var(--size-icon-default);
+      }
+
+      /* ---- 卡片（用 elevation.neutral） ------------------------------ */
+      .card {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-6);
+        padding: var(--space-20);
+        border-radius: var(--radius-xl);
+      }
+
+      /* ---- 字号阶梯 -------------------------------------------------- */
+      .scale {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-12);
+        padding: var(--space-20);
+        border-radius: var(--radius-xl);
+        background-color: var(--color-fill-quaternary);
+      }
+      .scale-row {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-16);
+      }
+      /* 标签用等宽族 + meta 字距，正好也验证了 font.family.mono 与 tracking */
+      .scale code {
+        flex: 0 0 auto;
+        font-family: var(--font-family-mono);
+        font-size: var(--font-size-meta);
+        letter-spacing: var(--font-tracking-meta);
+      }
+    </style>
+  </head>
+
+  <body>
+    <main>
+      <!-- 例 1：玻璃面板。.mat-thick 给材质背景 + 14px 模糊，.glass 给 accent 描边 + 着色阴影 -->
+      <section class="panel mat-thick glass">
+        <h1 class="h-heading">照片是唯一光源</h1>
+        <p class="t-sec">其余皆是其前的玻璃。</p>
+
+        <!-- 一行 chip -->
+        <div class="row">
+          <span class="chip is-on">全部</span>
+          <span class="chip">胶片</span>
+          <span class="chip">数码</span>
+          <span class="chip">2024</span>
+        </div>
+      </section>
+
+      <!-- 例 2：导航胶囊（激活态实心 accent）+ 圆形图标按钮（内联 SVG） -->
+      <div class="row">
+        <nav class="pill mat-ultra-thin glass-neutral">
+          <a class="pill-item is-active" href="#">照片</a>
+          <a class="pill-item" href="#">时间线</a>
+          <a class="pill-item" href="#">关于</a>
+        </nav>
+
+        <button class="icon-btn" type="button" aria-label="搜索">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5" />
+            <path
+              d="M10.4 10.4 14 14"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <!-- 例 3：卡片用 elevation.neutral —— 玻璃面优先用它，而不是一道硬阴影 -->
+      <article class="card mat-thick glass-neutral">
+        <h2 class="h-sub">elevation.neutral</h2>
+        <p class="t-ter">黑 6.7% × 3 层。深度来自叠加的透明层，不是一道硬阴影。</p>
+      </article>
+
+      <!-- 例 4：字号阶梯，逐档消费 font.size.* -->
+      <section class="scale">
+        <div class="scale-row">
+          <code class="t-ter">font.size.caption</code>
+          <span style="font-size: var(--font-size-caption)">徽章与角标</span>
+        </div>
+        <div class="scale-row">
+          <code class="t-ter">font.size.meta</code>
+          <span style="font-size: var(--font-size-meta)" class="t-sec">EXIF 35mm · f/1.8</span>
+        </div>
+        <div class="scale-row">
+          <code class="t-ter">font.size.label</code>
+          <span style="font-size: var(--font-size-label)">导航项与 chip</span>
+        </div>
+        <div class="scale-row">
+          <code class="t-ter">font.size.body</code>
+          <span style="font-size: var(--font-size-body)">正文默认档</span>
+        </div>
+        <div class="scale-row">
+          <code class="t-ter">font.size.heading</code>
+          <span style="font-size: var(--font-size-heading)">区块标题</span>
+        </div>
+        <div class="scale-row">
+          <code class="t-ter">font.size.title</code>
+          <span style="font-size: var(--font-size-title); font-family: var(--font-family-serif)"
+            >年份大标题（衬线）</span
+          >
+        </div>
+        <div class="scale-row">
+          <code class="t-ter">font.size.hero</code>
+          <span style="font-size: var(--font-size-hero)">空态</span>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

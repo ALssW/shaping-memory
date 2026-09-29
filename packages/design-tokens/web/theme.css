@@ -1,0 +1,85 @@
+/* ==========================================================================
+ * packages/design-tokens/web/theme.css
+ *
+ * 塑忆设计语言 —— 最小可运行主题基线
+ *
+ * 职责边界（规范 §5.1）：tokens.css 只声明变量与语义工具类，不含布局与 reset；
+ * 本文件是「把 token 装到页面上」的那一层：reset + html/body 基线 + ::selection。
+ * 它不新增任何 token 数值，只消费 tokens.css 暴露的变量。
+ *
+ * 【暗色是唯一方案】（规范 §1.1）
+ * color.background 恒为 #1c1c1e（Apple dark systemBackground）。
+ * 本文件刻意不提供浅色模式、不做主题切换、不写 prefers-color-scheme 分支，
+ * 也不接受 dark: 变体 —— 它恒为真，写了是冗余。
+ * 若要浅色模式，那是一次设计语言变更，必须先改 tokens.json 与规范正文。
+ * ========================================================================== */
+
+/* tokens.css 必须最先加载，后续所有规则都建立在它的变量之上 */
+@import url('./tokens.css');
+
+/* --------------------------------------------------------------------------
+ * reset：box-sizing 统一为 border-box，margin / padding 归零
+ * -------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+/* 表单控件的 UA 默认边框必须显式归零。
+   <button> 自带 `2px outset rgb(255,255,255)` —— 在暗底上就是一道显眼的白描边，
+   而它在 app.css 里无论删多少次 `border` 都删不掉（因为它并非本仓库源码所写）。
+   控件一律不画描边（规范 §1），所以这里连同字号、字体族一起从 UA 手里接管。 */
+button,
+input,
+select,
+textarea {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+/* 圆形图标按钮等需要保留浏览器原生外观的控件自行声明，此处不设 appearance: none，
+   以免影响 date / range 等依赖 UA 绘制的控件。 */
+
+/* --------------------------------------------------------------------------
+ * 根元素：声明本站只有暗色方案，让表单控件、滚动条等 UA 样式跟随变暗
+ * -------------------------------------------------------------------------- */
+html {
+  color-scheme: dark;
+}
+
+/* --------------------------------------------------------------------------
+ * body 基线：背景 / 正文色 / 字体族 / 字号 / 行高全部来自 token
+ * -------------------------------------------------------------------------- */
+body {
+  background-color: var(--color-background);
+  color: var(--color-text-base);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-body);
+  line-height: var(--font-leading-normal);
+
+  /* 暗底上的细体文字容易发糊，开启抗锯齿让字形更锐利 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --------------------------------------------------------------------------
+ * 选中态：accent 的 30%，取自 opacity.accent.selection。
+ * 和玻璃描边一样走 color-mix 现算，不把 accent 的 rgba 写死，
+ * 这样换 accent 时选中态自动跟随（与 tokens.ts 的 accentAt() 思路一致）。
+ * -------------------------------------------------------------------------- */
+::selection {
+  background-color: color-mix(
+    in srgb,
+    var(--color-accent) calc(var(--opacity-accent-selection) * 100%),
+    transparent
+  );
+  color: var(--color-text-base);
+}

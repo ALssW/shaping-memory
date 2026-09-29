@@ -1,0 +1,67 @@
+# 依赖
+node_modules/
+
+# 构建产物（可重新生成，不入库）
+dist/
+build/
+*.tsbuildinfo
+
+# Expo / React Native
+.expo/
+.expo-shared/
+web-build/
+# expo prebuild 生成的原生工程（由 app.json 推导，可随时重新生成）
+android/
+ios/
+
+# 移动端打包产物
+*.apk
+*.aab
+*.ipa
+
+# release 签名密钥与口令：
+apps/mobile/credentials/
+
+# 环境变量
+.env
+.env.*
+!.env.example
+
+# 本地生成物（缩略图、原片缓存，可重新生成）
+data/
+
+# 设备实测的产物（截图 / UI dump，可重新采集）
+tools/device-audit/out/
+
+# RAW 实证脚本的产物（原片副本 + 改写产物，单文件数十 MB，可重新生成）
+tools/device-audit/raw-test/out/
+tools/device-audit/raw-test/device-out/
+
+# 本地 Android SDK（Gradle 本地打包用，体积大，不入库）
+.android-sdk/
+
+# 日志
+*.log
+npm-debug.log*
+
+# 第三方工具二进制：exiftool 发行版约 33MB / 500+ 文件，
+# 不入库；按 tools/exiftool/README.txt 从 exiftool.org 下载解压到 tools/exiftool/ 即可
+tools/exiftool/exiftool.exe
+tools/exiftool/exiftool_files/
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# Trae 工作区：过程文档与本地配置不入库，团队规范随仓库分发
+.trae/*
+!.trae/rules/
+
+# 测试覆盖率报告
+coverage/
+
+# 证书与私钥：绝不入库
+*.pem
+*.key

@@ -1,0 +1,12 @@
+{
+  "name": "@shaping-memory/design-tokens",
+  "version": "1.0.0",
+  "private": true,
+  "description": "设计 token 双端产物入口：Web 消费 web/tokens.css，Web 与 React Native 共用 web/tokens.ts",
+  "type": "module",
+  "exports": {
+    ".": "./web/tokens.ts",
+    "./tokens.css": "./web/tokens.css",
+    "./theme.css": "./web/theme.css"
+  }
+}

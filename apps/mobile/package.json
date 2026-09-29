@@ -1,0 +1,38 @@
+{
+  "name": "@shaping-memory/mobile",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "塑忆移动端（Expo + React Native），与 apps/web 共用 @shaping-memory/core 与 @shaping-memory/design-tokens",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "typecheck": "tsc --noEmit",
+    "doctor": "npx expo install --fix"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^14.0.4",
+    "@shaping-memory/core": "*",
+    "@shaping-memory/design-tokens": "*",
+    "@shaping-memory/sdk": "*",
+    "expo": "~52.0.20",
+    "expo-blur": "~14.0.1",
+    "expo-file-system": "~18.0.12",
+    "expo-font": "~13.0.4",
+    "expo-image": "~2.0.4",
+    "expo-image-picker": "~16.0.6",
+    "expo-location": "~18.0.10",
+    "expo-media-library": "~17.0.6",
+    "expo-status-bar": "~2.0.0",
+    "react": "18.3.1",
+    "react-native": "0.76.9",
+    "react-native-safe-area-context": "4.12.0",
+    "react-native-webview": "13.12.5"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@types/react": "~18.3.12",
+    "typescript": "~5.3.3"
+  }
+}

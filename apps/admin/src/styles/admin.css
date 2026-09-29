@@ -1,0 +1,669 @@
+/* ==========================================================================
+ * apps/admin/src/styles/admin.css
+ *
+ * 后台工作台样式。原则：复用 design-tokens 的 CSS 变量，与前台同风格；
+ * 但后台是「工作台」不是「画廊」，信息密度更高，不做大留白与入场动效。
+ * 这里只写 AntD 覆盖不了的部分：整体骨架、表格里的照片缩略图、地图容器、
+ * 以及 EXIF 表单的字段头布局。
+ * ========================================================================== */
+
+/* --------------------------------------------------------------------------
+ * 整体骨架：页头固定在顶部，内容区可滚动
+ * -------------------------------------------------------------------------- */
+/* 页头高：基准 52px × 主题倍率，与 theme.ts 的 Layout.headerHeight 同源。
+   --theme-scale 只在 PC 被覆盖，窄屏取保底值 1，因此这里不需要写媒体查询。 */
+:root {
+  --admin-header-h: calc(52px * var(--theme-scale));
+  /* 表格容器（与固定列）的**实底色**：与 theme.ts 的 elevateBackground(background, 0.06)
+     是同一个合成（94% 背景 + 6% 白），只是写成 CSS 版本。
+     它用在两处：表格固定列的底、以及吸顶表头的底 —— 两者都必须完全不透明，
+     否则横向滚过来的数据列会从下面透出来。 */
+  --admin-surface: color-mix(in srgb, var(--color-background) 94%, #ffffff);
+}
+
+.admin-shell {
+  min-height: 100vh;
+  background-color: var(--color-background);
+}
+
+.admin-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-surface-chrome);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+  padding: 0 var(--space-20);
+  border-bottom: 1px solid var(--color-border-base);
+}
+
+.admin-brand {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+}
+
+.admin-brand__name {
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-base);
+}
+
+.admin-brand__slogan {
+  font-size: var(--font-size-meta);
+  letter-spacing: var(--font-tracking-meta);
+  color: var(--color-text-tertiary);
+}
+
+.admin-main {
+  padding: var(--space-20);
+}
+
+/* --------------------------------------------------------------------------
+ * 左侧导航：与页头一起常驻，只有内容区滚动
+ * -------------------------------------------------------------------------- */
+.admin-body {
+  align-items: stretch;
+}
+
+.admin-sider {
+  /* 页头高随主题倍率变，侧栏贴在其下方（同一个变量，改一处两处一起走） */
+  position: sticky;
+  top: var(--admin-header-h);
+  height: calc(100vh - var(--admin-header-h));
+  overflow: auto;
+  border-right: 1px solid var(--color-border-base);
+  background-color: var(--color-material-opaque) !important;
+}
+
+/* 菜单本体不铺底色，交给 Sider 的玻璃面 */
+.admin-menu {
+  background: transparent !important;
+  border-inline-end: none !important;
+}
+
+/* 页面标题：与工具条同排，字号介于正文与区块标题之间 */
+.admin-page-title {
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-base);
+}
+
+/* --------------------------------------------------------------------------
+ * 概览卡片与表单卡片：容器底色压淡一档，避免整屏都是同一种灰
+ * -------------------------------------------------------------------------- */
+.admin-stat-card .ant-statistic-title {
+  font-size: var(--font-size-meta);
+  color: var(--color-text-tertiary);
+}
+
+.admin-stat-card .ant-statistic-content {
+  font-size: var(--font-size-title);
+}
+
+.admin-form-card {
+  max-width: 640px;
+}
+
+/* --------------------------------------------------------------------------
+ * 上传进度：自己维护的列表（Upload 的内置列表已关掉）
+ * -------------------------------------------------------------------------- */
+.upload-progress {
+  margin-top: var(--space-16);
+  border-top: 1px solid var(--color-border-base);
+  padding-top: var(--space-12);
+}
+
+.upload-progress__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin-bottom: var(--space-8);
+}
+
+.upload-progress__list {
+  max-height: 220px;
+  overflow: auto;
+}
+
+.upload-progress__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-4) 0;
+  font-size: var(--font-size-meta);
+}
+
+/* 文件名占据整行剩余宽度，长文件名截断而非将状态徽章挤出 */
+.upload-progress__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+
+/* --------------------------------------------------------------------------
+ * 分享链接结果：链接与提取码分两行各自可复制
+ * -------------------------------------------------------------------------- */
+.share-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.share-result__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.share-result__label {
+  width: 64px;
+  flex: none;
+  font-size: var(--font-size-label);
+  color: var(--color-text-tertiary);
+}
+
+.share-result__value {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-meta);
+  color: var(--color-text-base);
+}
+
+.share-result__value--code {
+  color: var(--color-accent);
+  letter-spacing: var(--font-tracking-wide);
+}
+
+/* 创建分享链接弹窗里的「有效期 / 提取码」横排 */
+.admin-form-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-20);
+  margin-top: var(--space-16);
+}
+
+.share-form__label {
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-label);
+  color: var(--color-text-secondary);
+}
+
+/* 隐私列：点标签弹下拉，光标要表明它可以点 */
+.privacy-cell {
+  display: inline-block;
+  cursor: pointer;
+}
+
+/* 登录页：居中卡片，垂直填满视口 */
+.admin-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-20);
+}
+
+.admin-login__card {
+  width: 100%;
+  max-width: 360px;
+}
+
+/* --------------------------------------------------------------------------
+ * 列表：工具条 + 表格
+ * -------------------------------------------------------------------------- */
+.admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-12);
+  margin-bottom: var(--space-16);
+}
+
+.admin-toolbar__spacer {
+  flex: 1;
+}
+
+/* 表格里的缩略图：统一 48×48 方框裁切，保证行高一致 */
+.admin-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background-color: var(--color-fill-tertiary);
+}
+
+/* 缩略图列：整格可点选行，提供可点击的视觉反馈；点击图片本身仍走预览（在组件里阻止冒泡） */
+.thumb-cell {
+  display: inline-flex;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.thumb-cell:hover {
+  background-color: var(--color-fill-quaternary);
+}
+
+/* --------------------------------------------------------------------------
+ * 固定列（操作列）：横向滚动时必须是一块**完全不透明**的面
+ *
+ * antd 给固定列的底色取自 colorBgContainer，而本项目把它设成了半透明材质，
+ * 因此滚动时被它覆盖的列会透出。这里改用 --admin-surface ——
+ * 它既是不透明实底，又与整行/整个表头同色，固定列因此不会显露接缝。
+ *
+ * 【为什么不再用材质渐变叠底】半透明底在 hover / 选中态会被 antd 的
+ * `background` 简写整条覆盖掉，实底随之消失（那正是「底部信息穿透」的来源）；
+ * 实底 + 显式状态叠加（见下面的 row-hover / row-selected 规则）才是稳定写法。
+ * 【选择器只比 antd 的基础规则高一档】行 hover / 选中态由
+ * .ant-table-cell-row-hover、.ant-table-row-selected 提供，
+ * 若这里写得更具体，会把 antd 的行状态反馈一并盖掉。
+ * -------------------------------------------------------------------------- */
+.ant-table-wrapper .ant-table-tbody > tr > .ant-table-cell-fix-right,
+.ant-table-wrapper .ant-table-tbody > tr > .ant-table-cell-fix-left {
+  background-color: var(--admin-surface);
+  background-image: none;
+}
+
+/* 表头固定列：实底之上再叠一层表头洗底（fill.tertiary），
+   与其它表头单元格「洗底压在容器底上」的观感一致。 */
+.ant-table-wrapper .ant-table-thead > tr > .ant-table-cell-fix-right,
+.ant-table-wrapper .ant-table-thead > tr > .ant-table-cell-fix-left {
+  background-color: var(--admin-surface);
+  background-image: linear-gradient(var(--color-fill-tertiary), var(--color-fill-tertiary));
+}
+
+/* 行 hover / 选中：状态色（fill.quaternary / accent 洗底）本身是半透明的，
+   antd 用 `background` 简写铺上去时会同时清除实底，固定列因此再次出现底层内容穿透。
+   这里把实底补回来，状态色只作为它上面的一层渐变。 */
+.ant-table-wrapper .ant-table-tbody > tr > td.ant-table-cell-fix-right.ant-table-cell-row-hover,
+.ant-table-wrapper .ant-table-tbody > tr > td.ant-table-cell-fix-left.ant-table-cell-row-hover {
+  background-color: var(--admin-surface);
+  background-image: linear-gradient(var(--color-fill-quaternary), var(--color-fill-quaternary));
+}
+
+.ant-table-wrapper .ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-fix-right,
+.ant-table-wrapper .ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-fix-left {
+  background-color: var(--admin-surface);
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent),
+    color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent)
+  );
+}
+
+/* --------------------------------------------------------------------------
+ * 列宽 / 列顺序拖拽：右缘一条把手负责调宽，标题区按住可换位
+ * -------------------------------------------------------------------------- */
+.col-drag-cell {
+  position: relative;
+}
+
+.col-drag-cell__label {
+  cursor: grab;
+  user-select: none;
+}
+
+.col-drag-cell[data-dragging='true'] {
+  background-color: var(--color-fill-tertiary);
+}
+
+.col-drag-cell__handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+}
+
+/* 把手默认隐藏，仅在 hover 时显示，避免表头一直布满竖线 */
+.col-drag-cell__handle::after {
+  content: '';
+  position: absolute;
+  top: 25%;
+  right: 2px;
+  width: 2px;
+  height: 50%;
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.col-drag-cell__handle:hover::after {
+  opacity: 1;
+}
+
+/* 拖拽期间整页禁选 + 统一光标，避免拖拽过程中选中文本 */
+.col-dragging {
+  user-select: none;
+  cursor: grabbing;
+}
+
+/* --------------------------------------------------------------------------
+ * 分组管理：行拖拽排序
+ * 把手默认不显眼、hover 时高亮；整个把手是拖动起点（行其余位置不发起拖拽）
+ * -------------------------------------------------------------------------- */
+.group-drag-handle {
+  display: inline-block;
+  padding: 0 4px;
+  color: var(--color-text-quaternary, var(--color-text-tertiary));
+  cursor: grab;
+  user-select: none;
+}
+
+.group-drag-handle:hover {
+  color: var(--color-accent);
+}
+
+/* 正在被拖动的行：以浅底色作为落点提示 */
+.group-row--dragging > td {
+  background-color: var(--color-fill-tertiary);
+}
+
+/* --------------------------------------------------------------------------
+ * EXIF 表单：字段标题行「左标题 + 右清除」，hint 走 Form.Item 的 extra
+ * -------------------------------------------------------------------------- */
+.exif-form .ant-form-item-label > label {
+  width: 100%;
+}
+
+.exif-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  width: 100%;
+}
+
+.exif-field-head__clear {
+  font-size: var(--font-size-caption) !important;
+  height: auto !important;
+  padding: 0 !important;
+  color: var(--color-text-quaternary) !important;
+}
+
+.exif-field-head__clear:hover {
+  color: var(--color-danger) !important;
+}
+
+/* 批量编辑里「已标记清除」态：常态即标红，提示该行将被清空 */
+.exif-field-head__clear--on,
+.exif-field-head__clear--on:hover {
+  color: var(--color-danger) !important;
+}
+
+/* 分组标题：比普通正文重一档，带 accent 竖条，便于在长表单里定位 */
+.exif-group-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: var(--space-16) 0 var(--space-12);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.exif-group-title::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent);
+}
+
+/* --------------------------------------------------------------------------
+ * 地图：leaflet 容器必须有明确高度，否则渲染成空白
+ * -------------------------------------------------------------------------- */
+.gps-map {
+  width: 100%;
+  height: 320px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-base);
+  /* 建独立层叠上下文：leaflet 内部控件 z-index 高达 1000，不隔离会盖住 Drawer */
+  position: relative;
+  z-index: 0;
+  background-color: var(--color-fill-quaternary);
+}
+
+/* leaflet 默认浅色底与控件样式在暗色后台中较为突兀，这里压成中性玻璃面 */
+.gps-map .leaflet-container {
+  background: var(--color-fill-quaternary);
+  font-family: var(--font-family-sans);
+}
+
+.gps-map .leaflet-control-zoom a {
+  background-color: var(--color-material-ultra-thick);
+  color: var(--color-text-base);
+  border-color: var(--color-border-base);
+}
+
+.gps-map .leaflet-control-zoom a:hover {
+  background-color: var(--color-material-thick);
+  color: var(--color-accent);
+}
+
+.gps-map .leaflet-bar {
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+/* 选点信息三行：等宽数字便于比对坐标 */
+.gps-readout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-12);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-meta);
+  color: var(--color-text-secondary);
+}
+
+.gps-readout__row--wgs {
+  color: var(--color-accent);
+}
+
+/* 地点搜索的命中列表：地点名 + 坐标（等宽），点击一行即将视野移动到该点并落点 */
+.gps-hits {
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.gps-hits__item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-12);
+  width: 100%;
+  padding: var(--space-8) var(--space-12);
+  border: 0;
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-meta);
+  text-align: left;
+  cursor: pointer;
+}
+
+.gps-hits__item:hover {
+  background: var(--color-fill-quaternary);
+  color: var(--color-accent);
+}
+
+.gps-hits__item span {
+  flex: 1;
+  min-width: 0;
+}
+
+.gps-hits__item em {
+  flex: none;
+  font-family: var(--font-family-mono);
+  font-style: normal;
+  color: var(--color-text-quaternary);
+}
+
+/* 失败提示与「未找到」共用一行 —— 两者都属于「本次搜索无结果」，仅原因不同 */
+.gps-hits__error {
+  margin: 0 0 8px;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
+}
+
+/* 只读文件信息：描述列表紧凑化 */
+.exif-fileinfo .ant-descriptions-item-label,
+.exif-fileinfo .ant-descriptions-item-content {
+  font-size: var(--font-size-meta) !important;
+  padding-bottom: var(--space-4) !important;
+}
+
+/* --------------------------------------------------------------------------
+ * AntD 表格层级：吸顶表头 + 固定列
+ *
+ * 背景：操作列使用 fixed: 'right'（sticky 定位）。两处层级冲突由此而来：
+ *  1) 固定列若没有压过普通数据列的自建高层（缩略图、行内交互元素），横向滚动时
+ *     底层内容会「穿透」到固定列之上；
+ *  2) 固定列若压过常驻页头，滚到表头附近时它会盖住页头右上角的「退出登录」。
+ *
+ * 修复：把层级全部收进「面内容器层」（页头 z = 30）之下，并按
+ * 表体普通 < 表体固定 < 表头固定 排序 ——
+ *   表头整块（吸顶容器）  z = 25  —— 低于页头，永远压不住「退出登录」；
+ *   表头固定列            z = 4   —— 在表头内部压过普通表头单元格；
+ *   表体固定列            z = 2   —— 压过 z = 0 的受控数据列；
+ *   表头 / 表体普通单元格  z = 1 / 0 —— 各自建受控层叠上下文，封住内部高层。
+ * 数值取小整数：仅需表达层级高低，而非距视口顶端的距离。
+ * -------------------------------------------------------------------------- */
+
+/* 吸顶表头：由 AntD 的 sticky 属性开启（表头被拆成独立的 sticky 容器），
+   这里接管它的吸顶位置与层级 —— 内联的 top:0 由 !important 覆盖。 */
+.photo-table .ant-table-sticky-holder {
+  top: var(--admin-header-h) !important;
+  z-index: 25;
+}
+
+/* AntD 附赠的「粘性横向滚动条」（吸在视口底部的一条）：本页不需要 ——
+   横向滚动仍走表格自己的滚动条，避免视口底部出现多余的横向滚动条。 */
+.photo-table .ant-table-sticky-scroll {
+  display: none;
+}
+
+/* 固定列：sticky/right 由 AntD 内部写在内联样式上，这里只重申定位并抬层级。
+   表头与表体分别取值，避免表体的固定列盖住它自己的表头。 */
+.ant-table-wrapper .ant-table-thead > tr > th.ant-table-cell-fix-right,
+.ant-table-wrapper .ant-table-thead > tr > th.ant-table-cell-fix-left {
+  position: sticky !important;
+  z-index: 4;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr > td.ant-table-cell-fix-right,
+.ant-table-wrapper .ant-table-tbody > tr > td.ant-table-cell-fix-left {
+  position: sticky !important;
+  z-index: 2;
+}
+
+/* 非固定数据列：建立受控层叠上下文，将缩略图等自建高层的内部内容限制在固定列之下 */
+.ant-table-wrapper .ant-table-tbody > tr > td:not(.ant-table-cell-fix-right):not(.ant-table-cell-fix-left) {
+  position: relative;
+  z-index: 0;
+}
+
+/* 普通表头单元格：同上，将自定义表头（拖拽把手等）的内部高层限制在固定表头列之下 */
+.ant-table-wrapper .ant-table-thead > tr > th:not(.ant-table-cell-fix-right):not(.ant-table-cell-fix-left) {
+  position: relative;
+  z-index: 1;
+}
+
+/* --------------------------------------------------------------------------
+ * 主题配置页：颜色格 + 倍率行
+ *
+ * 全部用 flex + 变量间距书写，使「倍率放大」对这里也自动生效 ——
+ * 调整字号倍率后，本页自身也应用同一套观感，即所见即所得。
+ * -------------------------------------------------------------------------- */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-12) var(--space-16);
+}
+
+.theme-color {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.theme-color__name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-meta);
+  color: var(--color-text-secondary);
+  /* 长名称（如「辅助色（渐变末端）」）在窄列中截断，避免将取色块挤出 */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.theme-color__value {
+  flex: none;
+  font-family: var(--font-family-mono);
+}
+
+/* 一行：名称 + 滑杆（占满剩余宽度）+ 数字输入 */
+.theme-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  padding: var(--space-8) 0;
+}
+
+.theme-row + .theme-row {
+  border-top: 1px solid var(--color-border-base);
+}
+
+.theme-row__label {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: 260px;
+  min-width: 0;
+}
+
+.theme-row__name {
+  font-size: var(--font-size-label);
+  color: var(--color-text-base);
+}
+
+.theme-row__slider {
+  flex: 1;
+  min-width: 120px;
+  margin: 0;
+}
+
+.theme-row__number {
+  flex: none;
+  width: 96px;
+}
+
+/* 说明文字：比正文轻一档，跟在控件组之后 */
+.theme-note {
+  margin-top: var(--space-12);
+  font-size: var(--font-size-meta);
+  line-height: var(--font-leading-normal);
+  color: var(--color-text-tertiary);
+}
+
+.theme-note--foot {
+  max-width: 640px;
+}

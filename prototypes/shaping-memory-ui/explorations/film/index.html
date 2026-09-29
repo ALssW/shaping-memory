@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>胶片暗房 · 复古胶片塑忆</title>
+<style>
+:root{
+  --paper:#f2e6d0; --paper-deep:#ecdbbe; --paper-light:#f8efdd;
+  --ink:#3a2f22; --ink-sub:#6b5a43; --ink-faint:#9c8566;
+  --line:rgba(90,70,45,.22);
+  --acc:#c0522c; --acc-ink:#8f3c20;
+  --film:#2b2320;                 /* 手机壳深褐，偏"机器黑"，遵循深棕而非纯黑 */
+  --shadow-sm:0 6px 14px rgba(80,55,30,.14);
+  --shadow-md:0 18px 44px rgba(80,55,30,.24);
+  --r-lg:6px;                     /* 复古胶片多用小圆角、方正 */
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  background:var(--paper);color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  position:relative;overflow-x:hidden;
+}
+/* 纸张噪点 + 暖胶片颗粒背景 */
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.22'/%3E%3C/svg%3E");
+  mix-blend-mode:multiply;
+}
+.serif{font-family:"Songti SC","STSong","Noto Serif CJK SC",Georgia,"Times New Roman",serif}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.wrap{max-width:1180px;margin:0 auto;padding:0 26px;position:relative;z-index:2}
+
+/* ---------- 顶部导航（暗房工牌感） ---------- */
+.topnav{position:sticky;top:0;z-index:50;background:rgba(242,230,208,.92);
+  border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
+.topnav::after{content:"";position:absolute;left:0;right:0;bottom:-5px;height:5px;
+  background:repeating-linear-gradient(90deg,var(--acc) 0 18px,transparent 18px 26px);opacity:.35;z-index:-1}
+.nav-inner{max-width:1180px;margin:0 auto;height:64px;padding:0 26px;
+  display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand .mark{width:9px;height:9px;background:var(--acc);border-radius:1px;transform:rotate(45deg)}
+.brand b{font-size:18px;font-weight:600;letter-spacing:.04em;color:var(--ink)}
+.brand .tag{font-size:10px;color:var(--ink-faint);letter-spacing:.18em}
+.nav-links{display:flex;gap:28px;list-style:none}
+.nav-links a{text-decoration:none;color:var(--ink-sub);font-size:14px;
+  padding:5px 0;position:relative;transition:.2s;letter-spacing:.02em}
+.nav-links a.on,.nav-links a:hover{color:var(--acc-ink)}
+.nav-links a.on::after,.nav-links a:hover::after{
+  content:"";position:absolute;left:0;bottom:-2px;height:2px;width:100%;background:var(--acc)}
+.nav-actions{display:flex;align-items:center;gap:12px}
+.iconbtn{width:38px;height:38px;border-radius:4px;border:1px solid var(--line);background:transparent;
+  display:grid;place-items:center;cursor:pointer;color:var(--ink-sub);transition:.2s}
+.iconbtn:hover{color:var(--acc-ink);border-color:var(--acc)}
+.btn{display:inline-flex;align-items:center;gap:8px;background:var(--acc);color:#fbf3e3;
+  border:none;box-shadow:2px 3px 0 rgba(80,40,20,.35);border-radius:3px;
+  padding:10px 20px;font-size:14px;cursor:pointer;font-weight:600;transition:.15s;letter-spacing:.03em}
+.btn:hover{transform:translateY(-1px);box-shadow:3px 5px 0 rgba(80,40,20,.3)}
+.btn:active{transform:translateY(1px);box-shadow:0 1px 0 rgba(80,40,20,.3)}
+.btn.ghost{background:transparent;color:var(--acc-ink);border:1px solid var(--acc);
+  box-shadow:none}
+.btn.ghost:hover{background:rgba(192,82,44,.08);box-shadow:none}
+
+/* ---------- Hero（胶片标签 + 相框大图） ---------- */
+.hero{position:relative;z-index:2;padding:70px 0 40px}
+.hero-inner{display:grid;grid-template-columns:1.05fr .95fr;gap:52px;align-items:center}
+.kicker{font-size:12px;letter-spacing:.28em;color:var(--acc-ink);display:flex;align-items:center;
+  gap:10px;margin-bottom:16px}
+.kicker::before{content:"";width:34px;height:1px;background:var(--acc)}
+.hero h1{font-size:clamp(34px,5vw,58px);line-height:1.1;font-weight:700;letter-spacing:.01em}
+.hero h1 .u{color:var(--acc-ink);position:relative}
+.hero h1 .u::after{content:"";position:absolute;left:0;right:0;bottom:2px;height:6px;
+  background:rgba(192,82,44,.18)}
+.hero p{color:var(--ink-sub);font-size:16px;line-height:1.9;margin:18px 0 30px;max-width:520px}
+.hero-cta{display:flex;gap:14px}
+.hero-stats{display:flex;gap:42px;margin-top:36px}
+.stat .n{font-size:26px;font-weight:700;color:var(--ink)}
+.stat .l{font-size:11px;color:var(--ink-faint);letter-spacing:.14em;margin-top:2px}
+/* 相框大图：底片白边 + 撕边阴影 + 胶片档案角标 */
+.frame{position:relative;background:#f7efdc;padding:12px 12px 34px;box-shadow:var(--shadow-md);
+  transform:rotate(.6deg)}
+.frame::before{content:"";position:absolute;inset:6px;border:1px solid rgba(120,90,55,.18);pointer-events:none}
+.frame::after{content:"";position:absolute;left:0;right:0;bottom:-7px;height:14px;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='14'%3E%3Cpath d='M0 8 Q15 2 30 8 T60 8 L60 14 L0 14 Z' fill='%23f7efdc'/%3E%3C/svg%3E") repeat-x;opacity:.9}
+.frame img{width:100%;height:390px;object-fit:cover;display:block;filter:sepia(.32) saturate(1.05) contrast(1.02)}
+.film-mark{position:absolute;left:-9px;top:24px;
+  color:var(--acc-ink);font-size:10px;letter-spacing:.2em;writing-mode:vertical-rl;transform:rotate(-180deg)}
+.frame-cap{position:absolute;left:14px;right:14px;bottom:36px;display:flex;justify-content:space-between;
+  font-size:10px;letter-spacing:.12em;color:var(--ink-sub)}
+.hero-badge{position:absolute;right:-16px;top:-16px;background:var(--acc);color:#fbf3e3;
+  padding:10px 14px;box-shadow:2px 3px 0 rgba(80,40,20,.35);font-size:10px;letter-spacing:.14em}
+.hero-badge .mono{display:block;margin-top:3px;font-size:13px;letter-spacing:.06em;color:#fff}
+
+/* ---------- 区块标题 ---------- */
+.section{padding:58px 0 18px;position:relative;z-index:2}
+.sec-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:22px;border-bottom:1px solid var(--line);padding-bottom:14px}
+.sec-head h2{font-size:30px;font-weight:700;display:flex;align-items:baseline;gap:12px}
+.sec-head h2 .no{font-size:13px;color:var(--acc-ink);letter-spacing:.2em}
+.sec-head p{color:var(--ink-faint);font-size:12px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:7px 16px;background:transparent;border:1px solid var(--line);border-radius:2px;
+  font-size:13px;color:var(--ink-sub);cursor:pointer;transition:.18s;font-family:inherit}
+.chip:hover{color:var(--acc-ink);border-color:var(--acc)}
+.chip.on{background:var(--acc);color:#fbf3e3;border-color:var(--acc)}
+
+/* ---------- 照片网格（卡片带底片白边） ---------- */
+.grid{position:relative;z-index:2;columns:3;column-gap:26px;padding:8px 0 10px}
+.card{break-inside:avoid;margin-bottom:30px;background:#f7efdc;padding:9px 9px 13px;
+  box-shadow:var(--shadow-sm);cursor:pointer;transition:transform .25s ease,box-shadow .25s ease}
+.card:hover{transform:translateY(-4px) rotate(-.4deg);box-shadow:var(--shadow-md)}
+.polaroid-fill{position:relative;overflow:hidden;background:#e8d9b8}
+.card img{width:100%;display:block;filter:sepia(.32) saturate(1.05) contrast(1.02);transition:.4s}
+.card:hover img{filter:sepia(.2) saturate(1.12) contrast(1.04)}
+.card-meta{padding:10px 4px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.card-meta h3{font-size:17px;font-weight:700;line-height:1.3}
+.card-meta .cat{font-size:11px;color:var(--acc-ink);letter-spacing:.1em;margin-top:2px}
+.card-meta .meta{font-size:10px;color:var(--ink-faint);margin-top:5px;letter-spacing:.05em}
+.like{color:var(--ink-faint);font-size:13px;display:inline-flex;gap:5px;align-items:center}
+.like svg{width:14px;height:14px}
+
+/* ---------- 工具卡 ---------- */
+.toolbar{position:relative;z-index:2;display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding-bottom:20px}
+.tool-card{background:var(--paper-light);border:1px solid var(--line);border-top:3px solid var(--acc);
+  border-radius:3px;padding:20px;transition:.2s;cursor:pointer;position:relative}
+.tool-card::before{content:attr(data-idx);position:absolute;right:14px;top:12px;font-size:10px;color:var(--ink-faint);letter-spacing:.15em}
+.tool-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-sm)}
+.tool-card .t{font-size:15px;font-weight:700;display:flex;align-items:center;gap:9px;margin-bottom:8px;color:var(--ink)}
+.tool-card .t svg{color:var(--acc-ink)}
+.tool-card p{font-size:12px;color:var(--ink-sub);line-height:1.7}
+
+/* ---------- Lightbox（胶片相框详情） ---------- */
+.lightbox{position:fixed;inset:0;background:rgba(43,35,32,.78);backdrop-filter:blur(5px);
+  display:none;align-items:center;justify-content:center;z-index:100;padding:24px}
+.lightbox.open{display:flex}
+.lb-card{display:grid;grid-template-columns:1.5fr 1fr;max-width:1030px;width:100%;max-height:88vh;
+  background:#f7efdc;box-shadow:0 30px 90px rgba(30,20,10,.5);overflow:hidden}
+.lb-imgwrap{background:#e8d9b8;position:relative}
+.lb-img{width:100%;height:88vh;object-fit:cover;display:block;filter:sepia(.3) saturate(1.05)}
+.lb-imgwrap .frame-cap{position:absolute;font-size:10px;color:rgba(40,30,20,.75)}
+.lb-info{padding:26px 28px;overflow-y:auto;display:flex;flex-direction:column;background:#f7efdc}
+.lb-info h3{font-size:26px;font-weight:700}
+.lb-info .place{font-size:12px;color:var(--ink-sub);margin-bottom:8px;letter-spacing:.04em}
+.exif-title{font-size:11px;letter-spacing:.2em;color:var(--acc-ink);margin:18px 0 10px}
+.exif{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:12px 0;
+  display:grid;grid-template-columns:1fr 1fr;gap:4px 18px}
+.exif div{font-size:11px;color:var(--ink-faint);padding:6px 0;line-height:1.4}
+.exif div b{display:block;color:var(--ink);font-weight:700;font-size:13px;margin-top:2px}
+.lb-actions{margin-top:auto;padding-top:18px;display:flex;gap:10px}
+.lb-actions .btn{flex:1;justify-content:center}
+.lb-close{position:absolute;top:22px;right:26px;color:#f3e6ca;font-size:28px;cursor:pointer;line-height:1;z-index:3}
+.lb-close:hover{color:var(--acc)}
+
+/* ---------- App 手机壳 ---------- */
+.appside{padding:70px 0 40px;position:relative;z-index:2}
+.appside .head{text-align:center;margin-bottom:28px}
+.appside .head h2{font-size:30px;font-weight:700}
+.appside .head p{color:var(--ink-faint);font-size:12px;margin-top:8px}
+.phone-wrap{display:flex;justify-content:center}
+.phone{width:360px;height:760px;border-radius:48px;background:var(--film);padding:12px;
+  box-shadow:0 40px 90px rgba(50,35,20,.4);border:1px solid rgba(255,255,255,.05)}
+.phone::before{content:"REC ●";position:absolute;top:26px;margin-top:-4px;color:rgba(235,220,190,.7);
+  font-size:9px;letter-spacing:.2em;text-align:center;width:336px}
+.phone-screen{position:relative;width:100%;height:100%;border-radius:38px;
+  background:linear-gradient(180deg,#f4ead4,#ecd9b8);overflow:hidden;display:flex;flex-direction:column;color:var(--ink)}
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:150px;height:28px;
+  background:var(--film);border-radius:0 0 18px 18px;z-index:5}
+.app-body{flex:1;overflow-y:auto;padding:46px 16px 0;position:relative}
+.app-brand{font-size:17px;font-weight:700;margin-bottom:2px}
+.app-sub{font-size:10px;color:var(--ink-faint);letter-spacing:.12em;margin-bottom:14px}
+.app-imgrow{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.app-imgrow .w2{grid-column:span 2}
+.app-img,.app-img-sm{border:4px solid #f7efdc;box-shadow:var(--shadow-sm);width:100%;object-fit:cover;cursor:pointer;filter:sepia(.28)}
+.app-img{height:205px}.app-img-sm{height:140px}
+.app-footer{display:flex;border-top:1px solid var(--line);background:var(--paper-light)}
+.app-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 0 14px;
+  font-size:10px;color:var(--ink-faint);cursor:pointer;transition:.2s}
+.app-tab svg{width:21px;height:21px}
+.app-tab.on{color:var(--acc-ink);font-weight:600}
+.app-tab.on svg{color:var(--acc)}
+
+/* ND 计算器（胶片小字排版） */
+.nd-card{background:var(--paper-light);border:1px solid var(--line);border-top:3px solid var(--acc);
+  border-radius:3px;padding:18px}
+.nd-card label{font-size:10px;color:var(--ink-faint);letter-spacing:.16em}
+.nd-card input{width:100%;margin:8px 0 14px;padding:11px 12px;border:1px solid var(--line);
+  border-radius:2px;background:#fffaf0;font-size:16px;color:var(--ink);font-family:ui-monospace,Menlo,monospace}
+.nd-card input:focus{outline:2px solid rgba(192,82,44,.4);border-color:var(--acc)}
+.nd-out{margin-top:14px;padding:12px;border-left:3px solid var(--acc);background:rgba(192,82,44,.06);
+  font-size:12px;color:var(--ink-sub);line-height:1.8}
+.nd-out b{display:block;color:var(--acc-ink);font-size:20px;margin-bottom:4px}
+
+footer{position:relative;z-index:2;margin:20px auto 0;padding:28px 26px 34px;border-top:1px solid var(--line);
+  color:var(--ink-faint);font-size:12px;text-align:center;letter-spacing:.08em}
+
+@media(max-width:960px){.hero-inner{grid-template-columns:1fr;padding-top:10px}.grid{columns:2}
+  .toolbar{grid-template-columns:1fr 1fr}.lb-card{grid-template-columns:1fr;overflow-y:auto}.lb-img,.lb-imgwrap{height:50vh}}
+@media(max-width:560px){.grid{columns:1}.nav-links{display:none}.toolbar{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:no-preference){
+  .card,.frame,.tool-card,.hero h1,.hero p{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+  .card:nth-child(2){animation-delay:.05s}.card:nth-child(3){animation-delay:.1s}
+  .card:nth-child(4){animation-delay:.15s}.card:nth-child(5){animation-delay:.2s}
+  .card:nth-child(6){animation-delay:.25s}.card:nth-child(7){animation-delay:.3s}.card:nth-child(8){animation-delay:.35s}
+  @keyframes rise{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+}
+</style>
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<nav class="topnav">
+  <div class="nav-inner">
+    <div class="brand">
+      <span class="mark"></span><b>Shaping Memory</b><span class="tag mono">FILM ARCHIVE</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="#" class="on">首页</a></li>
+      <li><a href="#works">作品</a></li>
+      <li><a href="#works">影集</a></li>
+      <li><a href="#tools">工具</a></li>
+      <li><a href="#app">关于</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button class="iconbtn" id="btnSearch" aria-label="搜索">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      </button>
+      <button class="btn">上传作品</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<header class="hero">
+  <div class="wrap hero-inner">
+    <div>
+      <div class="kicker mono">EST. 2026 · 35MM</div>
+      <h1>把光影的<em class="u">边角颗粒</em><br>冲印进记忆里</h1>
+      <p>每一枚快门，都像暗房里显影的一张负片。这里沉淀你的作品、拍摄参数与相册手记，用胶片般的厚度守护影像资产，等待再一次定影、晾干、装册。</p>
+      <div class="hero-cta">
+        <button class="btn">浏览作品
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+        <button class="btn ghost">开始冲印</button>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><div class="n serif">1,284</div><div class="l mono">FRAMES</div></div>
+        <div class="stat"><div class="n serif">42</div><div class="l mono">ALBUMS</div></div>
+        <div class="stat"><div class="n serif">6</div><div class="l mono">YEARS</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="frame">
+        <span class="film-mark mono">FILM 120</span>
+        <div class="hero-badge mono">BASE <span id="heroCam"></span></div>
+        <img id="heroImg" alt="胶片主视觉">
+        <div class="frame-cap mono"><span id="heroM1"></span><span id="heroM2"></span></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- 分类 + 网格 -->
+<div class="section wrap" id="works">
+  <div class="sec-head">
+    <h2 class="serif"><span class="no mono">NO.01</span>精选作品</h2>
+    <div class="chips" id="chips" style="margin-top:6px"></div>
+  </div>
+</div>
+<div class="grid wrap" id="grid"></div>
+
+<!-- 工具 -->
+<div class="section wrap" id="tools">
+  <div class="sec-head">
+    <h2 class="serif"><span class="no mono">NO.02</span>摄影工具集</h2>
+    <p class="mono">即点即用 · 纯前端计算</p>
+  </div>
+</div>
+<div class="toolbar wrap" id="toolbar"></div>
+
+<!-- App 壳 -->
+<section class="appside wrap" id="app">
+  <div class="head">
+    <h2 class="serif"><span class="no mono">NO.03</span>&nbsp;移动端 App 预览</h2>
+    <p class="mono">底部导航已可切换到「工具」体验长曝光计算器</p>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone" style="position:relative">
+      <div class="phone-screen">
+        <div class="notch"></div>
+        <div class="app-body" id="appBody"></div>
+        <div class="app-footer" id="appTabs"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>Shaping Memory 塑忆 · 复古胶片风格预览（界面原型，未接入真实数据）</footer>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox">
+  <span class="lb-close" id="lbClose">✕</span>
+  <div class="lb-card" id="lbCard"></div>
+</div>
+
+<script src="../../mock.js"></script>
+<script>
+const grid = document.getElementById('grid');
+const chips = document.getElementById('chips');
+const toolbar = document.getElementById('toolbar');
+const appTabs = document.getElementById('appTabs');
+const appBody = document.getElementById('appBody');
+const lb = document.getElementById('lightbox');
+const lbCard = document.getElementById('lbCard');
+let curCat = '全部';
+let likes = {};
+
+// 工具图标（Lucide 内联合并使用，规避外部依赖）
+const icons = {
+  nd:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 3"/></svg>',
+  dof:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M7 4v5M17 4v5M7 15v5M17 15v5M4 7h16M4 17h16"/></svg>',
+  ev:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 18 0 9 9 0 0 1-18 0z"/><path d="M9 9.5 15 9.5M9 12h6M9 14.5h4"/></svg>',
+};
+
+PHOTOS.forEach(p => p.url = photoUrl(p));
+document.getElementById('heroImg').src = PHOTOS[0].url;
+document.getElementById('heroCam').textContent = PHOTOS[0].cam;
+document.getElementById('heroM1').textContent = PHOTOS[0].focal + ' ' + PHOTOS[0].aperture;
+document.getElementById('heroM2').textContent = PHOTOS[0].speed + ' · ISO ' + PHOTOS[0].iso;
+
+// ---- 分类 chips ----
+CATEGORIES.forEach(c => {
+  const b = document.createElement('button');
+  b.className = 'chip' + (c === curCat ? ' on' : '');
+  b.textContent = c;
+  b.onclick = () => { curCat = c; renderChips(); renderGrid(); };
+  chips.appendChild(b);
+});
+function renderChips(){ [...chips.children].forEach(c => c.classList.toggle('on', c.textContent === curCat)); }
+
+// ---- 桌面网格 ----
+function renderGrid(){
+  const list = curCat === '全部' ? PHOTOS : PHOTOS.filter(p => p.cat === curCat);
+  grid.innerHTML = '';
+  list.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `
+      <div class="polaroid-fill"><img src="${p.url}" alt="${p.title}" loading="lazy"></div>
+      <div class="card-meta">
+        <div><h3 class="serif">${p.title}</h3>
+          <div class="cat mono">${p.cat.toUpperCase()} · ${p.focal} ${p.aperture}</div>
+          <div class="meta mono">${p.place} · ${p.date}</div>
+        </div>
+        <span class="like">${likes[p.id] ? heart(true) : heart(false)} ${likes[p.id] ?? p.likes}</span>
+      </div>`;
+    div.onclick = () => openLightbox(p);
+    grid.appendChild(div);
+  });
+}
+function heart(filled){
+  return filled
+    ? '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8"><path d="M12 21 4 13a5 5 0 1 1 8-5.6A5 5 0 1 1 20 13Z"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21 4 13a5 5 0 1 1 8-5.6A5 5 0 1 1 20 13Z"/></svg>';
+}
+
+// ---- 工具卡 ----
+TOOL_LIST.forEach((t, i) => {
+  const d = document.createElement('div');
+  d.className = 'tool-card'; d.dataset.idx = '0' + (i + 1);
+  d.innerHTML = `<div class="t">${icons[t.key]} ${t.name}</div><p>${t.desc}</p>`;
+  d.onclick = () => location.hash = '#app';
+  toolbar.appendChild(d);
+});
+
+// ---- Lightbox / EXIF ----
+function openLightbox(p){
+  lbCard.innerHTML = `
+    <div class="lb-imgwrap"><img class="lb-img" src="${p.url}" alt="${p.title}">
+      <span class="frame-cap mono" style="left:12px;bottom:12px">${p.place} · ${p.date}</span></div>
+    <div class="lb-info">
+      <h3 class="serif">${p.title}</h3>
+      <div class="place mono">${p.place} · ${p.date}</div>
+      <div class="exif-title mono">EXPOSURE DATA</div>
+      <div class="exif">
+        <div>相机<b>${p.cam}</b></div>
+        <div>镜头<b>${p.lens}</b></div>
+        <div>焦距<b>${p.focal}</b></div>
+        <div>光圈<b>${p.aperture}</b></div>
+        <div>快门<b>${p.speed}</b></div>
+        <div>ISO<b>${p.iso}</b></div>
+        <div>白平衡<b>${p.wb}</b></div>
+        <div>色温<b>${p.temp}</b></div>
+      </div>
+      <div class="lb-actions">
+        <span class="like" style="align-items:center">${heart(true)} ${p.likes} 赞</span>
+        <button class="btn">下载原图</button>
+      </div>
+    </div>`;
+  lb.classList.add('open');
+}
+lbClose.onclick = () => lb.classList.remove('open');
+lb.onclick = e => { if (e.target === lb) lb.classList.remove('open'); };
+
+// ---- App 端渲染 ----
+function renderAppGrid(photos){
+  const g = document.createElement('div');
+  g.className = 'app-imgrow';
+  photos.forEach((p, i) => {
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    img.className = (i % 5 === 0) ? 'app-img w2' : 'app-img-sm';
+    if ((i % 5 === 3) || (i % 5 === 4)) img.className = 'app-img-sm';
+    if (i === 0 || i === 6) img.className = 'app-img w2';
+    img.src = p.url; img.alt = p.title;
+    img.onclick = () => openLightbox(p);
+    g.appendChild(img);
+  });
+  appBody.appendChild(g);
+}
+
+// App 底部导航
+const APP_TABS = [
+  { key:'home', label:'首页', svg:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>' },
+  { key:'grid', label:'作品', svg:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>' },
+  { key:'tool', label:'工具', svg:icons.nd },
+  { key:'me', label:'我的', svg:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>' },
+];
+let curTab = 'home';
+function renderTabs(){
+  appTabs.innerHTML = '';
+  APP_TABS.forEach(t => {
+    const d = document.createElement('div');
+    d.className = 'app-tab' + (t.key === curTab ? ' on' : '');
+    d.innerHTML = t.svg + `<span>${t.label}</span>`;
+    d.onclick = () => switchTab(t.key);
+    appTabs.appendChild(d);
+  });
+}
+function switchTab(key){
+  curTab = key;
+  renderTabs();
+  appBody.innerHTML = '';
+  if (key === 'home'){
+    appBody.innerHTML += `<div class="app-brand">Shaping Memory</div><div class="app-sub mono">ALBUM · 365 FRAMES</div>`;
+    renderAppGrid(PHOTOS.slice(0,6));
+  } else if (key === 'grid'){
+    appBody.innerHTML += `<div class="app-brand">全部作品</div><div class="app-sub mono">SORT BY DATE</div>`;
+    renderAppGrid(PHOTOS);
+  } else if (key === 'tool'){
+    appBody.innerHTML += `<div class="app-brand">摄影工具</div><div class="app-sub mono">LONG EXPOSURE · ND</div>` + toolAppHTML();
+    bindToolApp();
+  } else {
+    appBody.innerHTML += `<div class="app-brand">我的</div><div class="app-sub mono">ACCOUNT</div>
+      <div style="padding:20px;border:1px dashed var(--ink-faint);border-top:3px solid var(--acc);border-radius:3px;color:var(--ink-sub);font-size:13px">收藏、关注与冲洗偏好将在此呈现</div>`;
+  }
+  appBody.scrollTop = 0;
+}
+// App 工具页：ND 长曝光计算器
+function toolAppHTML(){
+  return `
+    <div class="nd-card">
+      <label>当前快门（秒）</label>
+      <input id="ndBase" type="number" value="1" step="0.1">
+      <label>ND 减光档位（档）</label>
+      <input id="ndStops" type="number" value="3" min="1" step="1">
+      <button class="btn" style="width:100%;justify-content:center" onclick="calcND()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>计算结果</button>
+      <div class="nd-out" id="ndOut">目标快门将在此显示</div>
+    </div>`;
+}
+function calcND(){
+  const base = parseFloat(document.getElementById('ndBase').value) || 1;
+  const stops = parseInt(document.getElementById('ndStops').value) || 0;
+  const out = base * Math.pow(2, stops);
+  document.getElementById('ndOut').innerHTML =
+    `<b>${formatTime(out)}</b>公式：${base}s × 2^${stops} = ${out.toFixed(2)}s`;
+}
+function formatTime(s){
+  if (s >= 60){ const m = s/60; return m >= 60 ? (m/60).toFixed(1)+' 小时' : m.toFixed(1)+' 分钟'; }
+  if (s < 1) return '1/'+Math.round(1/s)+' s';
+  return s.toFixed(2)+' 秒';
+}
+function bindToolApp(){ /* onchange 输入时实时联动 */ 
+  const b = document.getElementById('ndBase'), k = document.getElementById('ndStops');
+  b.addEventListener('input', calcND); k.addEventListener('input', calcND);
+}
+
+// 初始化
+renderChips();
+renderGrid();
+switchTab('home');
+</script>
+</body>
+</html>

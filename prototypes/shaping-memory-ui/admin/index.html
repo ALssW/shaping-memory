@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>塑忆 · 后台管理端</title>
+
+<!--
+  ============================================================================
+  后台管理端高保真原型（单文件自包含，双击可开）
+  ----------------------------------------------------------------------------
+  【风格方向】折中方案：玻璃外壳 + 实底数据区
+    · 外壳（顶栏 / 左侧导航）：半透明材质 + accent 发丝边 + backdrop-filter 模糊
+    · 数据区（表格 / 表单 / 抽屉 / 批量条）：实底色块，一律不加 backdrop-filter
+    理由：前台「照片是唯一光源」在这里不成立——后台没有照片可当光源，
+    长表格与密集录入需要稳定对比度，所以数据区回退到实底。
+
+  【Token 来源】唯一事实源 packages/design-tokens/tokens.json
+    theme.css 内部 @import 了 tokens.css，因此只需引入 theme.css 一个文件。
+    本原型是全新代码，没有旧命名包袱，全部使用规范命名（规范 §7.1 的已知偏差不在此沿用）。
+    路径层级：本文件在 prototypes/shaping-memory-ui/admin/，到仓库根需要三层 ..
+    （../ 到 shaping-memory-ui/ ，../../ 到 prototypes/ ，../../../ 才是仓库根）
+    ============================================================================
+-->
+<link rel="stylesheet" href="../../../packages/design-tokens/web/theme.css">
+
+<style>
+/* ==========================================================================
+   0. 应用级常量
+   --shell-w 是外壳宽度，属布局常量而非设计 token，故就近定义。
+   ========================================================================== */
+:root{ --shell-w: 232px; }
+
+body{ background-color: var(--color-background); overflow-x:hidden; }
+
+/* 顶部极淡的 accent 辉光：给玻璃外壳一点可采样内容，避免 blur 完全失效
+   （数值全部由 accent 与既有 opacity 档位现算，不引入新色） */
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(120% 60% at 50% -10%,
+      color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-subtle) * 100%),transparent),
+      transparent 70%);
+}
+
+.ic{ width:var(--size-icon-compact); height:var(--size-icon-compact); flex:none;
+  fill:none; stroke:currentColor; stroke-width:1.6;
+  stroke-linecap:round; stroke-linejoin:round; }
+.ic-20{ width:var(--size-icon-default); height:var(--size-icon-default); }
+.t-dis{ color:var(--color-text-quaternary); }
+.mono{ font-family:var(--font-family-mono); }
+.serif{ font-family:var(--font-family-serif); }
+button{ font-family:inherit; cursor:pointer; border:none; background:none; color:inherit; }
+a{ color:inherit; text-decoration:none; }
+img{ display:block; }
+
+/* ==========================================================================
+   1. 玻璃外壳（顶栏 + 左侧导航）
+   ========================================================================== */
+
+/* 顶栏：fixed 让主区内容从它下方滚过，backdrop-filter 才有真实可模糊的内容 */
+.topbar{
+  position:fixed; top:0; left:0; right:0; height:var(--size-header);
+  z-index:var(--z-surface-chrome);
+  display:flex; align-items:center; gap:var(--space-16);
+  padding:0 var(--space-16);
+  background-color:var(--color-material-ultra-thick);
+  backdrop-filter:blur(var(--blur-md));
+  border-bottom:1px solid color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-border) * 100%),transparent);
+}
+.brand{ display:flex; align-items:center; gap:var(--space-8); }
+.brand .mark{ width:var(--space-12); height:var(--space-12); border-radius:var(--space-4);
+  background-color:var(--color-accent);
+  box-shadow:0 0 0 var(--space-4) color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-subtle) * 100%),transparent); }
+.brand b{ font-size:var(--font-size-label); font-weight:var(--font-weight-semibold); letter-spacing:var(--font-tracking-wide); }
+.brand span{ font-size:var(--font-size-caption); color:var(--color-text-quaternary); letter-spacing:var(--font-tracking-brand); }
+.crumb{ font-size:var(--font-size-label); color:var(--color-text-tertiary); display:flex; align-items:center; gap:var(--space-6); }
+.crumb b{ color:var(--color-text-base); font-weight:var(--font-weight-medium); }
+
+/* 左侧导航：整高玻璃柱，底部常驻存储用量 */
+.sidebar{
+  position:fixed; left:0; top:var(--size-header); bottom:0; width:var(--shell-w);
+  z-index:var(--z-surface-chrome);
+  display:flex; flex-direction:column;
+  padding:var(--space-16) var(--space-12);
+  background-color:var(--color-material-thick);
+  backdrop-filter:blur(var(--blur-md));
+  border-right:1px solid var(--color-border-base);
+}
+.nav-group{ font-size:var(--font-size-caption); letter-spacing:var(--font-tracking-meta);
+  color:var(--color-text-quaternary); padding:var(--space-8) var(--space-12) var(--space-6); }
+.navi{
+  display:flex; align-items:center; gap:var(--space-8);
+  height:var(--size-button-sm); padding:0 var(--space-12); margin-bottom:var(--space-2);
+  border-radius:var(--radius-lg); font-size:var(--font-size-label);
+  color:var(--color-text-secondary); transition:background-color var(--motion-duration-base) var(--motion-easing-smooth),
+  color var(--motion-duration-base) var(--motion-easing-smooth);
+}
+.navi:hover{ color:var(--color-text-base); background-color:var(--color-fill-secondary); }
+.navi.on{
+  color:var(--color-accent); font-weight:var(--font-weight-semibold);
+  background-color:color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-wash) * 100%),transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-border) * 100%),transparent);
+}
+.navi .tail{ margin-left:auto; font-size:var(--font-size-caption); color:var(--color-text-quaternary); }
+
+/* 侧栏底部：存储用量（进度条用 accent 的低透明度，不做第二套色） */
+.storage{ margin-top:auto; padding:var(--space-12); border-radius:var(--radius-lg);
+  background-color:var(--color-fill-quaternary); }
+.storage .row{ display:flex; justify-content:space-between; font-size:var(--font-size-meta); color:var(--color-text-tertiary); }
+.storage .bar{ height:var(--space-4); margin:var(--space-8) 0 var(--space-6);
+  border-radius:var(--radius-full); background-color:var(--color-fill-tertiary); overflow:hidden; }
+.storage .bar i{ display:block; height:100%; width:68%;
+  background-color:color-mix(in srgb,var(--color-accent) 60%,transparent); }
+
+/* ==========================================================================
+   2. 主区（实底数据区都在这里）
+   ========================================================================== */
+main{
+  position:relative; z-index:1;
+  margin-left:var(--shell-w);
+  padding:calc(var(--size-header) + var(--space-24)) var(--space-32) var(--space-64);
+}
+.mods{ display:none; animation:modin var(--motion-duration-slow) var(--motion-easing-smooth); }
+.mods.on{ display:block; }
+@keyframes modin{ from{ opacity:0; transform:translateY(var(--space-6)); } to{ opacity:1; transform:none; } }
+
+.page-head{ display:flex; align-items:flex-end; gap:var(--space-16); margin-bottom:var(--space-20); }
+.page-head h1{ font-family:var(--font-family-serif); font-size:var(--font-size-title);
+  font-weight:var(--font-weight-semibold); letter-spacing:var(--font-tracking-tight); }
+.page-head p{ font-size:var(--font-size-label); color:var(--color-text-tertiary); margin-top:var(--space-4); }
+.page-head .acts{ margin-left:auto; display:flex; align-items:center; gap:var(--space-8); }
+
+/* 通用实底容器：容器比内部条目圆一档（规范 §2.3） */
+.solid{
+  background-color:var(--color-fill-quaternary);
+  border-radius:var(--radius-xl);
+}
+.solid-hd{ display:flex; align-items:center; gap:var(--space-12);
+  padding:var(--space-12) var(--space-16); border-bottom:1px solid var(--color-border-base); }
+.solid-hd h2{ font-size:var(--font-size-body); font-weight:var(--font-weight-semibold); }
+.solid-hd .sub{ font-size:var(--font-size-meta); color:var(--color-text-quaternary); }
+
+/* ==========================================================================
+   3. 按钮 / 输入 / chip / 徽章
+   ========================================================================== */
+.btn{
+  display:inline-flex; align-items:center; gap:var(--space-6);
+  height:var(--size-button-sm); padding:0 var(--space-12);
+  border-radius:var(--radius-lg); font-size:var(--font-size-label); font-weight:var(--font-weight-medium);
+  color:var(--color-text-secondary); background-color:var(--color-fill-base);
+  transition:background-color var(--motion-duration-base) var(--motion-easing-smooth),
+    color var(--motion-duration-base) var(--motion-easing-smooth);
+}
+.btn:hover{ color:var(--color-text-base); background-color:var(--color-fill-secondary); }
+.btn:disabled{ opacity:var(--opacity-disabled); cursor:not-allowed; }
+.btn .ic{ width:var(--size-icon-compact); height:var(--size-icon-compact); }
+/* accent 描边按钮：底色用 wash(0.12)，hover 提到 border(0.2)，始终是 accent 的既有档位 */
+.btn-acc{
+  color:var(--color-accent); font-weight:var(--font-weight-semibold);
+  background-color:color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-wash) * 100%),transparent);
+}
+.btn-acc:hover{ background-color:color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-border) * 100%),transparent); }
+/* accent 实心按钮：仅用于页面级主操作，一屏至多一个 */
+.btn-fill{ background-color:var(--color-accent); color:var(--color-background);
+  font-weight:var(--font-weight-semibold); }
+.btn-fill:hover{ background-color:var(--color-accent-secondary); color:var(--color-background); }
+
+.inp{
+  height:var(--size-button-sm); padding:0 var(--space-12);
+  border-radius:var(--radius-lg); font-size:var(--font-size-label); font-family:inherit;
+  color:var(--color-text-base); background-color:var(--color-fill-quaternary);
+  outline:none;
+  transition:box-shadow var(--motion-duration-base) var(--motion-easing-smooth);
+}
+.inp::placeholder{ color:var(--color-text-quaternary); }
+.inp:focus{ box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-border) * 100%),transparent); }
+.inp:disabled{ opacity:var(--opacity-disabled); }
+.search-wrap{ position:relative; display:inline-flex; align-items:center; }
+.search-wrap .ic{ position:absolute; left:var(--space-12); color:var(--color-text-quaternary); pointer-events:none; }
+.search-wrap .inp{ padding-left:calc(var(--space-12) + var(--size-icon-compact) + var(--space-6)); width:260px; }
+
+.chips{ display:flex; gap:var(--space-6); flex-wrap:wrap; }
+.chip{
+  height:var(--size-chip); padding:0 var(--space-12); border-radius:var(--radius-full);
+  font-size:var(--font-size-label); color:var(--color-text-secondary);
+  background-color:var(--color-fill-quaternary);
+  transition:all var(--motion-duration-base) var(--motion-easing-smooth);
+}
+.chip:hover{ color:var(--color-text-base); background-color:var(--color-fill-secondary); }
+.chip.on{
+  color:var(--color-accent); font-weight:var(--font-weight-semibold);
+  background-color:color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-wash) * 100%),transparent);
+}
+
+/* 状态徽章：published 走 accent；ok / failed / trash 走语义状态色（规范 §1.3）；
+   其余状态（draft / paused / archived）走 text 降级档位，不引入新色相。 */
+.st{ display:inline-flex; align-items:center; gap:var(--space-6);
+  height:var(--size-chip); padding:0 var(--space-8); border-radius:var(--radius-full);
+  font-size:var(--font-size-meta); letter-spacing:var(--font-tracking-meta);
+  color:var(--color-text-tertiary); background-color:var(--color-fill-quaternary); }
+.st .dot{ width:var(--space-6); height:var(--space-6); border-radius:var(--radius-full); background:currentColor; }
+/* 三种状态色共用一套「同色相淡底 + 同色相描边」配方：用 currentColor 取色，
+   所以 danger 与 success 都不必各写一遍，也不会出现写死的 rgba */
+.st[data-s="ok"], .st[data-s="failed"], .st[data-s="trash"]{
+  background-color:color-mix(in srgb,currentColor calc(var(--opacity-state-wash) * 100%),transparent);
+}
+.st[data-s="ok"]{ color:var(--color-success); }
+.st[data-s="failed"]{ color:var(--color-danger); }
+.st[data-s="trash"]{ color:var(--color-danger); text-decoration:line-through; }
+.st[data-s="published"]{
+  color:var(--color-accent);
+  background-color:color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-subtle) * 100%),transparent);
+}
+.st[data-s="draft"]{ color:var(--color-text-secondary); }
+.st[data-s="paused"]{ color:var(--color-text-tertiary); }
+.st[data-s="archived"]{ color:var(--color-text-quaternary); }
+
+/* 破坏性操作：默认中性，hover 才浮出 danger 的低透明度底（规范 §1.3）。
+   与 .btn:hover 同档位、只换色相，避免删除按钮在静态画面里大喊大叫 */
+.btn-danger:hover{
+  color:var(--color-danger);
+  background-color:color-mix(in srgb,var(--color-danger) calc(var(--opacity-state-hover) * 100%),transparent);
+}
+
+/* ==========================================================================
+   4. 资源管理：数据表格
+   ========================================================================== */
+.toolbar{ display:flex; align-items:center; gap:var(--space-12); flex-wrap:wrap;
+  padding:var(--space-12) var(--space-16); border-bottom:1px solid var(--color-border-base); }
+.toolbar .right{ margin-left:auto; display:flex; align-items:center; gap:var(--space-8); }
+
+.tbl{ width:100%; border-collapse:separate; border-spacing:0; font-size:var(--font-size-label); }
+.tbl th{
+  /* 吸顶表头必须不透明；material-opaque(.92) 不加 blur，视觉上等价实底，且不引入新数值 */
+  position:sticky; top:var(--size-header); z-index:var(--z-inset-chrome);
+  background-color:var(--color-material-opaque);
+  text-align:left; font-weight:var(--font-weight-medium); font-size:var(--font-size-meta);
+  letter-spacing:var(--font-tracking-meta); color:var(--color-text-tertiary);
+  padding:var(--space-8) var(--space-12); border-bottom:1px solid var(--color-border-base);
+}
+.tbl td{ padding:var(--space-8) var(--space-12); border-bottom:1px solid var(--color-border-base);
+  color:var(--color-text-secondary); vertical-align:middle; }
+.tbl tbody tr{ transition:background-color var(--motion-duration-fast) var(--motion-easing-smooth); }
+.tbl tbody tr:hover{ background-color:var(--color-fill-tertiary); }
+.tbl tbody tr.sel{ background-color:color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-wash) * 100%),transparent); }
+.tbl tbody tr.sel td{ color:var(--color-text-base); }
+.tbl .fname{ color:var(--color-text-base); font-weight:var(--font-weight-medium); }
+.tbl .meta{ font-family:var(--font-family-mono); font-size:var(--font-size-meta); color:var(--color-text-tertiary); }
+.cell-thumb{ width:calc(var(--size-button-md) + var(--space-8)); }
+.cell-thumb img{ width:var(--size-button-md); height:var(--size-button-md);
+  object-fit:cover; border-radius:var(--radius-sm); background-color:var(--color-fill-secondary); }
+.cell-act{ display:flex; gap:var(--space-2); }
+.mini{ width:var(--size-icon-button-compact); height:var(--size-icon-button-compact);
+  border-radius:var(--radius-full); display:grid; place-items:center; color:var(--color-text-tertiary); }
+.mini:hover{ color:var(--color-text-base); background-color:var(--color-fill-base); }
+.mini:hover .ic{ color:var(--color-text-base); }
+.mini .ic{ width:var(--size-icon-compact); height:var(--size-icon-compact); }
+/* 行内软删除按钮：hover 换成 danger 的淡底与字形色，与 .btn-danger 同规则 */
+.mini[data-act="trash"]:hover{
+  color:var(--color-danger);
+  background-color:color-mix(in srgb,var(--color-danger) calc(var(--opacity-state-hover) * 100%),transparent);
+}
+.mini[data-act="trash"]:hover .ic{ color:var(--color-danger); }
+
+/* 勾选框：自绘，避免 UA 控件在暗色下不可控 */
+.cbx{ appearance:none; width:var(--space-16); height:var(--space-16); flex:none;
+  border-radius:var(--radius-sm); border:1px solid var(--color-border-base);
+  background-color:var(--color-fill-quaternary); cursor:pointer; position:relative;
+  transition:all var(--motion-duration-fast) var(--motion-easing-smooth); }
+.cbx:hover{ border-color:color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-border) * 100%),transparent); }
+.cbx:checked, .cbx:indeterminate{
+  background-color:var(--color-accent); border-color:transparent; }
+.cbx:checked::after{ content:""; position:absolute; left:5px; top:2px; width:4px; height:8px;
+  border:solid var(--color-background); border-width:0 2px 2px 0; transform:rotate(45deg); }
+.cbx:indeterminate::after{ content:""; position:absolute; left:3px; top:6px; right:3px; height:2px;
+  border-radius:2px; background-color:var(--color-background); }
+.cbx:disabled{ opacity:var(--opacity-disabled); cursor:not-allowed; }
+
+.empty{ padding:var(--space-40); text-align:center; color:var(--color-text-quaternary);
+  font-size:var(--font-size-label); }
+
+/* 批量操作条：固定底部实底胶囊，出现时明确反馈「选中了多少」 */
+#batchbar{
+  position:fixed; left:calc(var(--shell-w) + var(--space-32)); bottom:var(--space-32);
+  z-index:var(--z-surface-popover);
+  display:flex; align-items:center; gap:var(--space-12);
+  padding:var(--space-8) var(--space-8) var(--space-8) var(--space-16);
+  border-radius:var(--radius-xxl);
+  background-color:var(--color-background);
+  box-shadow:var(--elevation-context);
+  opacity:0; transform:translateY(var(--space-16)); pointer-events:none;
+  transition:opacity var(--motion-duration-base) var(--motion-easing-smooth),
+    transform var(--motion-duration-base) var(--motion-easing-snappy);
+}
+#batchbar.on{ opacity:1; transform:none; pointer-events:auto; }
+#batchbar .count{ font-size:var(--font-size-label); color:var(--color-text-secondary); }
+#batchbar .count b{ color:var(--color-accent); font-weight:var(--font-weight-semibold); }
+
+/* ==========================================================================
+   5. 上传队列
+   ========================================================================== */
+.dropzone{
+  display:flex; flex-direction:column; align-items:center; gap:var(--space-8);
+  padding:var(--space-32); margin-bottom:var(--space-20); text-align:center;
+  border:1px dashed color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-border) * 100%),transparent);
+  border-radius:var(--radius-xl); background-color:var(--color-fill-quaternary);
+}
+.dropzone .ic{ width:var(--size-icon-default); height:var(--size-icon-default); color:var(--color-text-tertiary); }
+.dropzone b{ font-size:var(--font-size-body); font-weight:var(--font-weight-medium); }
+.dropzone span{ font-size:var(--font-size-meta); color:var(--color-text-quaternary); }
+
+.uq{ display:grid; gap:var(--space-8); }
+.uitem{ padding:var(--space-12) var(--space-16); border-radius:var(--radius-lg);
+  background-color:var(--color-fill-quaternary); }
+.uitem .top{ display:flex; align-items:center; gap:var(--space-12); }
+.uitem .name{ font-size:var(--font-size-label); color:var(--color-text-base); }
+.uitem .sz{ font-family:var(--font-family-mono); font-size:var(--font-size-meta); color:var(--color-text-quaternary); }
+.uitem .top .st{ margin-left:auto; }
+.pbar{ height:var(--space-4); margin:var(--space-8) 0; border-radius:var(--radius-full);
+  background-color:var(--color-fill-tertiary); overflow:hidden; }
+.pbar i{ display:block; height:100%; background-color:var(--color-accent); transition:width var(--motion-duration-slow) var(--motion-easing-smooth); }
+/* 分片网格：一眼看出「分片上传」的粒度，done/doing/pending 三态 */
+.chunks{ display:flex; gap:2px; flex-wrap:wrap; }
+.chunks i{ width:var(--space-12); height:var(--space-4); border-radius:1px; background-color:var(--color-fill-base); }
+.chunks i.done{ background-color:color-mix(in srgb,var(--color-accent) 60%,transparent); }
+.chunks i.doing{ background-color:var(--color-accent); }
+
+/* ==========================================================================
+   6. 分类与相册（目录树 + 标签 + 人脸）
+   ========================================================================== */
+.cols{ display:grid; grid-template-columns:300px 1fr; gap:var(--space-16); align-items:start; }
+.tree{ padding:var(--space-8); }
+.tree .node{
+  display:flex; align-items:center; gap:var(--space-6);
+  height:var(--size-button-sm); padding:0 var(--space-8);
+  border-radius:var(--radius-md); font-size:var(--font-size-label);
+  color:var(--color-text-secondary); cursor:pointer;
+  transition:background-color var(--motion-duration-fast) var(--motion-easing-smooth);
+}
+.tree .node:hover{ background-color:var(--color-fill-tertiary); color:var(--color-text-base); }
+.tree .node.on{ color:var(--color-accent); background-color:color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-wash) * 100%),transparent); }
+.tree .node .tw{ width:var(--space-16); display:grid; place-items:center; color:var(--color-text-quaternary); }
+.tree .node .tw .ic{ width:var(--font-size-meta); height:var(--font-size-meta); }
+.tree .node .n{ margin-left:auto; font-family:var(--font-family-mono); font-size:var(--font-size-meta); color:var(--color-text-quaternary); }
+.tree .sub{ display:none; padding-left:var(--space-16); }
+.tree .sub.open{ display:block; }
+
+.tagcloud{ display:flex; flex-wrap:wrap; gap:var(--space-8); padding:var(--space-16); }
+.tag-pill{ display:inline-flex; align-items:center; gap:var(--space-6);
+  height:var(--size-button-sm); padding:0 var(--space-12); border-radius:var(--radius-full);
+  font-size:var(--font-size-label); color:var(--color-text-secondary);
+  background-color:var(--color-fill-base); }
+.tag-pill .n{ font-family:var(--font-family-mono); font-size:var(--font-size-meta); color:var(--color-text-quaternary); }
+.tag-pill:hover{ color:var(--color-text-base); }
+
+.faces{ display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+  gap:var(--space-12); padding:var(--space-16); }
+.face{ text-align:center; }
+.face .ring{ width:var(--space-64); height:var(--space-64); margin:0 auto var(--space-6);
+  border-radius:var(--radius-full); overflow:hidden;
+  background-color:var(--color-fill-secondary); }
+.face .ring img{ width:100%; height:100%; object-fit:cover; }
+.face b{ display:block; font-size:var(--font-size-label); font-weight:var(--font-weight-medium); }
+.face b.unnamed{ color:var(--color-text-quaternary); font-weight:var(--font-weight-regular); }
+.face span{ font-family:var(--font-family-mono); font-size:var(--font-size-meta); color:var(--color-text-quaternary); }
+
+/* ==========================================================================
+   7. EXIF 编辑抽屉（实底面，不加 blur）
+   ========================================================================== */
+#scrim{ position:fixed; inset:0; z-index:var(--z-surface-scrim);
+  background-color:rgba(0,0,0,.5);
+  opacity:0; pointer-events:none; transition:opacity var(--motion-duration-base) var(--motion-easing-smooth); }
+#scrim.on{ opacity:1; pointer-events:auto; }
+#drawer{
+  position:fixed; top:0; right:0; bottom:0; width:420px; z-index:var(--z-surface-modal);
+  display:flex; flex-direction:column;
+  background-color:var(--color-background);
+  border-left:1px solid color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-border) * 100%),transparent);
+  box-shadow:var(--elevation-neutral);
+  transform:translateX(100%);
+  transition:transform var(--motion-duration-slow) var(--motion-easing-smooth);
+}
+#drawer.on{ transform:none; }
+.drawer-hd{ display:flex; align-items:center; gap:var(--space-12);
+  padding:var(--space-16); border-bottom:1px solid var(--color-border-base); }
+.drawer-hd .thumb{ width:var(--size-button-lg); height:var(--size-button-lg); border-radius:var(--radius-md);
+  object-fit:cover; background-color:var(--color-fill-secondary); }
+.drawer-hd h3{ font-size:var(--font-size-body); font-weight:var(--font-weight-semibold); }
+.drawer-hd .f{ font-family:var(--font-family-mono); font-size:var(--font-size-meta); color:var(--color-text-quaternary); }
+.drawer-bd{ flex:1; overflow-y:auto; padding:var(--space-16); }
+.field{ margin-bottom:var(--space-12); }
+.field label{ display:block; font-size:var(--font-size-meta); letter-spacing:var(--font-tracking-meta);
+  color:var(--color-text-tertiary); margin-bottom:var(--space-6); }
+.field .inp{ width:100%; }
+.field .ro{ height:var(--size-button-sm); display:flex; align-items:center; padding:0 var(--space-12);
+  border-radius:var(--radius-lg); background-color:var(--color-fill-quaternary);
+  border:1px dashed var(--color-border-base);
+  font-family:var(--font-family-mono); font-size:var(--font-size-meta); color:var(--color-text-quaternary); }
+.f2{ display:grid; grid-template-columns:1fr 1fr; gap:var(--space-12); }
+.sect{ font-size:var(--font-size-meta); letter-spacing:var(--font-tracking-meta);
+  color:var(--color-text-quaternary); margin:var(--space-20) 0 var(--space-12);
+  padding-bottom:var(--space-6); border-bottom:1px solid var(--color-border-base); }
+.sect:first-child{ margin-top:0; }
+.drawer-ft{ display:flex; align-items:center; gap:var(--space-8);
+  padding:var(--space-16); border-top:1px solid var(--color-border-base); }
+.drawer-ft .state{ margin-left:auto; font-size:var(--font-size-meta); color:var(--color-text-quaternary); }
+
+/* ==========================================================================
+   8. RBAC 权限矩阵
+   ========================================================================== */
+.roles{ display:grid; grid-template-columns:260px 1fr; gap:var(--space-16); align-items:start; }
+.role{ display:flex; align-items:flex-start; gap:var(--space-8); width:100%; text-align:left;
+  padding:var(--space-12); margin-bottom:var(--space-6); border-radius:var(--radius-lg);
+  background-color:var(--color-fill-quaternary);
+  transition:all var(--motion-duration-base) var(--motion-easing-smooth); }
+.role:hover{ background-color:var(--color-fill-tertiary); }
+.role.on{ background-color:color-mix(in srgb,var(--color-accent) calc(var(--opacity-accent-subtle) * 100%),transparent); }
+.role .ic{ margin-top:var(--space-2); color:var(--color-text-quaternary); }
+.role.on .ic{ color:var(--color-accent); }
+/* 文案容器必须是 block：里面 b / i 都是 block，用 inline span 包会产生匿名块 */
+.role .rtxt{ display:block; min-width:0; }
+.role b{ display:block; font-size:var(--font-size-label); font-weight:var(--font-weight-medium);
+  color:var(--color-text-base); }
+.role i{ display:block; font-style:normal; font-size:var(--font-size-meta); color:var(--color-text-quaternary); }
+
+.matrix{ width:100%; border-collapse:separate; border-spacing:0; font-size:var(--font-size-label); }
+.matrix th{ padding:var(--space-8) var(--space-12); text-align:left;
+  font-size:var(--font-size-meta); font-weight:var(--font-weight-medium); letter-spacing:var(--font-tracking-meta);
+  color:var(--color-text-tertiary); border-bottom:1px solid var(--color-border-base); }
+.matrix th.c, .matrix td.c{ text-align:center; width:96px; }
+.matrix td{ padding:var(--space-8) var(--space-12); border-bottom:1px solid var(--color-border-base); }
+.matrix .grp td{ background-color:var(--color-fill-quaternary);
+  font-size:var(--font-size-meta); letter-spacing:var(--font-tracking-meta); color:var(--color-text-tertiary); }
+.matrix .perm b{ color:var(--color-text-base); font-weight:var(--font-weight-medium); }
+.matrix .perm span{ display:block; font-size:var(--font-size-meta); color:var(--color-text-quaternary); }
+.matrix tbody tr:hover td{ background-color:var(--color-fill-tertiary); }
+.matrix .grp:hover td{ background-color:var(--color-fill-quaternary); }
+
+/* ==========================================================================
+   9. Toast
+   ========================================================================== */
+#toast{ position:fixed; left:50%; bottom:var(--space-40); z-index:var(--z-surface-toast);
+  transform:translate(-50%,var(--space-12)); opacity:0; pointer-events:none;
+  display:flex; align-items:center; gap:var(--space-8);
+  padding:var(--space-8) var(--space-16); border-radius:var(--radius-full);
+  font-size:var(--font-size-label); color:var(--color-text-base);
+  background-color:var(--color-material-opaque); backdrop-filter:blur(var(--blur-xxl));
+  box-shadow:var(--elevation-context);
+  transition:opacity var(--motion-duration-base) var(--motion-easing-smooth),
+    transform var(--motion-duration-base) var(--motion-easing-snappy); }
+#toast.on{ opacity:1; transform:translate(-50%,0); }
+#toast .ic{ color:var(--color-accent); }
+</style>
+</head>
+<body>
+
+<!-- ==========================================================================
+     内联 SVG 图标库：原型内禁止 emoji，所有图标一律 <use> 引用
+     ========================================================================== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-asset" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M4 17l5-5 4 4 3-2 4 4"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></symbol>
+  <symbol id="i-taxo" viewBox="0 0 24 24"><path d="M3 6.5A2 2 0 015 4.5h3.5l2 2H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></symbol>
+  <symbol id="i-exif" viewBox="0 0 24 24"><path d="M4 7h11M18.5 7H20M4 12h5M12.5 12H20M4 17h9M16.5 17H20"/><circle cx="16.5" cy="7" r="2"/><circle cx="10.5" cy="12" r="2"/><circle cx="14.5" cy="17" r="2"/></symbol>
+  <symbol id="i-rbac" viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.3-2.9 8.2-7 9.5-4.1-1.3-7-5.2-7-9.5V6z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5L20 20"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 10-2.5 5.8M20 18v-5h-5"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+  <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16z"/><path d="M14.5 5.5l4 4"/></symbol>
+  <symbol id="i-rename" viewBox="0 0 24 24"><path d="M4 6h9M4 12h6M4 18h9"/><path d="M16.5 18l3-3-2.5-2.5-3 3V18z"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24"><path d="M4 8.5A2 2 0 016 6.5h3l2 2h7a2 2 0 012 2v5a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><path d="M12 12.5v4m0-4l-1.8 1.8M12 12.5l1.8 1.8"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M4 12.5V5a1 1 0 011-1h7.5L20 11.5 12.5 19z"/><circle cx="8.5" cy="8.5" r="1.2"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="4" rx="1.5"/><path d="M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8M10 12h4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12m0 0l-4.5-4.5M12 16l4.5-4.5M4 19h16"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="7" y="5" width="3.5" height="14" rx="1"/><rect x="13.5" y="5" width="3.5" height="14" rx="1"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.5 3L6 13h4.5L10 21l7.5-10H13z"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M14 4H6a2 2 0 00-2 2v12a2 2 0 002 2h8"/><path d="M17 8l4 4-4 4M9 12h12"/></symbol>
+</svg>
+
+<!-- ============================= 玻璃顶栏 ============================= -->
+<header class="topbar">
+  <div class="brand">
+    <span class="mark"></span>
+    <b>PHOTO ADMIN</b>
+    <span>CONTROL ROOM</span>
+  </div>
+  <div class="crumb" id="crumb"><b>资源管理</b></div>
+  <div style="margin-left:auto; display:flex; align-items:center; gap:var(--space-8)">
+    <a class="btn" href="../index.html"><svg class="ic"><use href="#i-out"/></svg>返回前台</a>
+    <button class="btn btn-fill" data-goto="#upload"><svg class="ic"><use href="#i-upload"/></svg>上传</button>
+    <button class="mini" title="当前账号"><svg class="ic"><use href="#i-user"/></svg></button>
+  </div>
+</header>
+
+<!-- ============================= 玻璃侧栏 ============================= -->
+<aside class="sidebar">
+  <div class="nav-group">内容</div>
+  <a class="navi on" href="#resources" data-route="resources"><svg class="ic"><use href="#i-asset"/></svg>资源管理<span class="tail">47</span></a>
+  <a class="navi" href="#upload" data-route="upload"><svg class="ic"><use href="#i-upload"/></svg>上传队列<span class="tail">4</span></a>
+  <div class="nav-group">组织</div>
+  <a class="navi" href="#taxonomy" data-route="taxonomy"><svg class="ic"><use href="#i-taxo"/></svg>分类与相册</a>
+  <a class="navi" href="#exif" data-route="exif"><svg class="ic"><use href="#i-exif"/></svg>EXIF 元数据</a>
+  <div class="nav-group">系统</div>
+  <a class="navi" href="#rbac" data-route="rbac"><svg class="ic"><use href="#i-rbac"/></svg>角色与权限</a>
+
+  <div class="storage">
+    <div class="row"><span>存储用量</span><span class="mono">1.7 / 2.5 TB</span></div>
+    <div class="bar"><i></i></div>
+    <div class="row"><span class="mono">47 张原片 · 3 个副本</span></div>
+  </div>
+</aside>
+
+<main>
+  <!-- ======================= ① 资源管理 ======================= -->
+  <section class="mods on" id="m-resources">
+    <div class="page-head">
+      <div>
+        <h1>资源管理</h1>
+        <p>全部原片资源 · 支持多选后批量重命名 / 移动 / 打标签 / 归档 / 软删除</p>
+      </div>
+      <div class="acts">
+        <button class="btn" id="btn-reload"><svg class="ic"><use href="#i-refresh"/></svg>刷新索引</button>
+        <a class="btn btn-acc" href="#upload"><svg class="ic"><use href="#i-upload"/></svg>分片上传</a>
+      </div>
+    </div>
+
+    <div class="solid">
+      <div class="toolbar">
+        <span class="search-wrap">
+          <svg class="ic"><use href="#i-search"/></svg>
+          <input class="inp" id="q" placeholder="搜索文件名 / 标题 / 地点 / 相机">
+        </span>
+        <div class="chips" id="cat-chips"></div>
+        <div class="right">
+          <select class="inp" id="status-sel">
+            <option value="">全部状态</option>
+            <option value="published">已发布</option>
+            <option value="draft">草稿</option>
+            <option value="archived">已归档</option>
+            <option value="trash">回收站</option>
+          </select>
+        </div>
+      </div>
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th style="width:32px"><input type="checkbox" class="cbx" id="ck-all"></th>
+            <th style="width:56px">预览</th>
+            <th>文件名 / 标题</th>
+            <th style="width:88px">分类</th>
+            <th style="width:132px">原始尺寸</th>
+            <th style="width:112px">拍摄时间</th>
+            <th style="width:96px">状态</th>
+            <th style="width:120px">操作</th>
+          </tr>
+        </thead>
+        <tbody id="res-body"></tbody>
+      </table>
+      <div class="empty" id="res-empty" style="display:none">没有符合条件的资源</div>
+    </div>
+  </section>
+
+  <!-- ======================= ② 上传队列 ======================= -->
+  <section class="mods" id="m-upload">
+    <div class="page-head">
+      <div>
+        <h1>上传队列</h1>
+        <p>分片上传 · 秒传命中 · 断点续传 · 失败自动重试 3 次</p>
+      </div>
+      <div class="acts">
+        <button class="btn" id="btn-allpause"><svg class="ic"><use href="#i-pause"/></svg>全部暂停</button>
+        <button class="btn btn-acc" id="btn-allresume"><svg class="ic"><use href="#i-play"/></svg>全部继续</button>
+      </div>
+    </div>
+
+    <div class="dropzone">
+      <svg class="ic"><use href="#i-upload"/></svg>
+      <b>把 RAW / JPEG 拖到这里</b>
+      <span>单文件上限 4 GB · 默认 8 MB 分片 · 命中服务端指纹时秒传</span>
+    </div>
+
+    <div class="solid" style="margin-bottom:var(--space-16)">
+      <div class="solid-hd"><h2>进行中</h2><span class="sub" id="up-summary"></span></div>
+      <div style="padding:var(--space-12)" class="uq" id="uq-live"></div>
+    </div>
+
+    <div class="solid">
+      <div class="solid-hd"><h2>已完成</h2><span class="sub">保留 7 天可回溯</span></div>
+      <div style="padding:var(--space-12)" class="uq" id="uq-done"></div>
+    </div>
+  </section>
+
+  <!-- ======================= ③ 分类与相册 ======================= -->
+  <section class="mods" id="m-taxonomy">
+    <div class="page-head">
+      <div>
+        <h1>分类与相册</h1>
+        <p>目录树手工组织 · 智能标签自动聚类 · 人脸分组待命名</p>
+      </div>
+      <div class="acts">
+        <button class="btn" id="btn-rescan"><svg class="ic"><use href="#i-refresh"/></svg>重新扫描</button>
+        <button class="btn btn-acc"><svg class="ic"><use href="#i-plus"/></svg>新建相册</button>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div class="solid tree" id="tree"></div>
+
+      <div style="display:grid; gap:var(--space-16)">
+        <div class="solid">
+          <div class="solid-hd">
+            <h2>智能标签</h2>
+            <span class="sub">由模型自动打标，可人工纠正</span>
+            <button class="btn" style="margin-left:auto">管理标签</button>
+          </div>
+          <div class="tagcloud" id="tagcloud"></div>
+        </div>
+
+        <div class="solid">
+          <div class="solid-hd">
+            <h2>人脸分组</h2>
+            <span class="sub" id="face-sub"></span>
+            <button class="btn" style="margin-left:auto">批量命名</button>
+          </div>
+          <div class="faces" id="faces"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= ④ EXIF 元数据 ======================= -->
+  <section class="mods" id="m-exif">
+    <div class="page-head">
+      <div>
+        <h1>EXIF 元数据</h1>
+        <p>点任意一行打开右侧抽屉读写元数据 · 修改写入 sidecar 不触碰原片</p>
+      </div>
+      <div class="acts">
+        <button class="btn" id="btn-exif-export"><svg class="ic"><use href="#i-download"/></svg>导出 CSV</button>
+      </div>
+    </div>
+    <div class="solid">
+      <table class="tbl">
+        <thead>
+          <tr><th style="width:56px">预览</th><th>文件名</th><th style="width:150px">相机</th><th style="width:180px">镜头</th>
+            <th style="width:88px">曝光</th><th style="width:96px">感光度</th><th style="width:88px">色温</th><th style="width:88px">操作</th></tr>
+        </thead>
+        <tbody id="exif-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ======================= ⑤ 角色与权限 ======================= -->
+  <section class="mods" id="m-rbac">
+    <div class="page-head">
+      <div>
+        <h1>角色与权限</h1>
+        <p>RBAC 按「角色 × 权限」授权 · 超级管理员为内置角色不可编辑</p>
+      </div>
+      <div class="acts">
+        <button class="btn btn-acc" id="btn-save-rbac"><svg class="ic"><use href="#i-check"/></svg>保存变更</button>
+      </div>
+    </div>
+
+    <div class="roles">
+      <div class="solid" style="padding:var(--space-12)" id="role-list"></div>
+      <div class="solid">
+        <div class="solid-hd">
+          <h2 id="matrix-title">权限矩阵</h2>
+          <span class="sub" id="matrix-sub"></span>
+        </div>
+        <table class="matrix"><tbody id="matrix-body"></tbody></table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- 批量操作条 -->
+<div id="batchbar">
+  <span class="count">已选 <b id="sel-n">0</b> 项</span>
+  <button class="btn" data-batch="rename"><svg class="ic"><use href="#i-rename"/></svg>重命名</button>
+  <button class="btn" data-batch="move"><svg class="ic"><use href="#i-move"/></svg>移动</button>
+  <button class="btn" data-batch="tag"><svg class="ic"><use href="#i-tag"/></svg>加标签</button>
+  <button class="btn" data-batch="archive"><svg class="ic"><use href="#i-archive"/></svg>归档</button>
+  <button class="btn btn-danger" data-batch="trash"><svg class="ic"><use href="#i-trash"/></svg>软删除</button>
+  <button class="mini" data-batch="clear" title="取消选择"><svg class="ic"><use href="#i-close"/></svg></button>
+</div>
+
+<!-- EXIF 抽屉 -->
+<div id="scrim"></div>
+<aside id="drawer" aria-hidden="true">
+  <div class="drawer-hd">
+    <img class="thumb" id="dw-thumb" alt="">
+    <div style="min-width:0">
+      <h3 id="dw-title">—</h3>
+      <div class="f" id="dw-file">—</div>
+    </div>
+    <button class="mini" id="dw-close" style="margin-left:auto" title="关闭"><svg class="ic"><use href="#i-close"/></svg></button>
+  </div>
+  <div class="drawer-bd">
+    <div class="sect">基本信息</div>
+    <div class="field"><label>标题</label><input class="inp" id="f-title"></div>
+    <div class="f2">
+      <div class="field"><label>拍摄时间</label><input class="inp" id="f-date"></div>
+      <div class="field"><label>拍摄地点</label><input class="inp" id="f-place"></div>
+    </div>
+
+    <div class="sect">器材</div>
+    <div class="field"><label>相机</label><input class="inp" id="f-cam"></div>
+    <div class="field"><label>镜头</label><input class="inp" id="f-lens"></div>
+
+    <div class="sect">曝光</div>
+    <div class="f2">
+      <div class="field"><label>焦段</label><input class="inp" id="f-focal"></div>
+      <div class="field"><label>光圈</label><input class="inp" id="f-aperture"></div>
+      <div class="field"><label>ISO</label><input class="inp" id="f-iso"></div>
+      <div class="field"><label>快门</label><input class="inp" id="f-speed"></div>
+      <div class="field"><label>色温</label><input class="inp" id="f-temp"></div>
+      <div class="field"><label>白平衡</label><input class="inp" id="f-wb"></div>
+    </div>
+
+    <div class="sect">只读</div>
+    <div class="f2">
+      <div class="field"><label>原始尺寸</label><div class="ro" id="f-dim">—</div></div>
+      <div class="field"><label>文件大小</label><div class="ro" id="f-size">—</div></div>
+    </div>
+    <div class="field"><label>内容指纹（blake3）</label><div class="ro" id="f-hash">—</div></div>
+  </div>
+  <div class="drawer-ft">
+    <button class="btn btn-acc" id="dw-save"><svg class="ic"><use href="#i-check"/></svg>保存</button>
+    <button class="btn" id="dw-reset">重置</button>
+    <span class="state" id="dw-state">未修改</span>
+  </div>
+</aside>
+
+<div id="toast"><svg class="ic"><use href="#i-check"/></svg><span id="toast-msg"></span></div>
+
+<script src="../mock.js"></script>
+<script>
+/* ============================================================================
+ * 后台管理端交互脚本
+ * 数据来源：../mock.js 的 PHOTOS（47 张，与前台四套风格完全一致）
+ * 路由：hash（#resources / #upload / #taxonomy / #exif / #rbac）
+ * ========================================================================== */
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+/* ----------------------------------------------------------------------------
+ * 1) 把「照片」补齐成「后台资源」
+ *    前台只关心展示，后台还需要文件名 / 字节数 / 原始像素 / 审核状态。
+ *    这些字段用 stableHash 从 id 稳定派生 —— 刷新页面结果不变，便于反复核对。
+ * -------------------------------------------------------------------------- */
+const STATUS_POOL = ['published', 'published', 'published', 'draft', 'archived', 'trash'];
+const STATUS_TEXT = { published: '已发布', draft: '草稿', archived: '已归档', trash: '回收站' };
+
+const ASSETS = PHOTOS.map((p, i) => {
+  const seq   = String(1000 + i);
+  const bytes = (18 + stableHash(p.id + 'bytes', 46)) * 1024 * 1024;  // 18~63 MB
+  const [w, h] = p.size === 'portrait' ? [4160, 6240] : [6240, 4160];
+  return {
+    ...p,
+    file:    'DSC' + seq + '_' + p.id.toUpperCase() + '.ARW',
+    bytes, w, h,
+    status:  STATUS_POOL[stableHash(p.id + 'status', STATUS_POOL.length)],
+    hash:    'blake3:' + (stableHash(p.id + 'hash', 0xffffff)).toString(16).padStart(6, '0') + '…' +
+             (stableHash(p.img + 'h2', 0xffff)).toString(16).padStart(4, '0'),
+  };
+});
+const byId = id => ASSETS.find(a => a.id === id);
+
+/* 人类可读的字节数 */
+function fmtSize(b) {
+  return b >= 1073741824 ? (b / 1073741824).toFixed(2) + ' GB' : (b / 1048576).toFixed(1) + ' MB';
+}
+
+/* ----------------------------------------------------------------------------
+ * 2) 路由
+ * -------------------------------------------------------------------------- */
+const ROUTES = {
+  resources: { title: '资源管理',     el: 'm-resources' },
+  upload:    { title: '上传队列',     el: 'm-upload' },
+  taxonomy:  { title: '分类与相册',   el: 'm-taxonomy' },
+  exif:      { title: 'EXIF 元数据',  el: 'm-exif' },
+  rbac:      { title: '角色与权限',   el: 'm-rbac' },
+};
+
+function route() {
+  const key = (location.hash || '#resources').slice(1);
+  const r = ROUTES[key] || ROUTES.resources;
+  $$('.mods').forEach(s => s.classList.toggle('on', s.id === r.el));
+  $$('.navi').forEach(a => a.classList.toggle('on', a.dataset.route === key));
+  $('#crumb').innerHTML = '<b>' + r.title + '</b>';
+  window.scrollTo({ top: 0 });   // 切模块回到顶部，避免残留滚动位置造成困惑
+}
+
+/* ----------------------------------------------------------------------------
+ * 3) 资源管理：筛选 + 表格渲染 + 多选
+ * -------------------------------------------------------------------------- */
+const state = { q: '', cat: '全部', status: '', selected: new Set() };
+
+/* 筛选结果：搜索命中 文件名/标题/地点/相机 任一即可 */
+function filtered() {
+  const q = state.q.trim().toLowerCase();
+  return ASSETS.filter(a => {
+    if (state.cat !== '全部' && a.cat !== state.cat) return false;
+    if (state.status && a.status !== state.status) return false;
+    if (!q) return true;
+    return (a.file + a.title + a.place + a.cam).toLowerCase().includes(q);
+  });
+}
+
+function renderCatChips() {
+  $('#cat-chips').innerHTML = CATEGORIES.map(c =>
+    `<button class="chip${c === state.cat ? ' on' : ''}" data-cat="${c}">${c}</button>`).join('');
+}
+
+function renderResources() {
+  const rows = filtered();
+  $('#res-body').innerHTML = rows.map(a => `
+    <tr data-id="${a.id}" class="${state.selected.has(a.id) ? 'sel' : ''}">
+      <td><input type="checkbox" class="cbx" data-ck="${a.id}" ${state.selected.has(a.id) ? 'checked' : ''}></td>
+      <td class="cell-thumb"><img src="${photoUrl(a)}" alt="" loading="lazy"></td>
+      <td>
+        <div class="fname">${a.title}</div>
+        <div class="meta">${a.file}</div>
+      </td>
+      <td>${a.cat}</td>
+      <td class="meta">${a.w}×${a.h}<br>${fmtSize(a.bytes)}</td>
+      <td class="meta">${a.date}</td>
+      <td><span class="st" data-s="${a.status}"><i class="dot"></i>${STATUS_TEXT[a.status]}</span></td>
+      <td>
+        <div class="cell-act">
+          <button class="mini" data-act="exif" title="编辑 EXIF"><svg class="ic"><use href="#i-exif"/></svg></button>
+          <button class="mini" data-act="rename" title="重命名"><svg class="ic"><use href="#i-rename"/></svg></button>
+          <button class="mini" data-act="trash" title="软删除"><svg class="ic"><use href="#i-trash"/></svg></button>
+        </div>
+      </td>
+    </tr>`).join('');
+
+  $('#res-empty').style.display = rows.length ? 'none' : 'block';
+  syncSelectionUI();
+}
+
+/* 表头三态勾选框 + 批量条显隐，都随 selection 收敛到一处 */
+function syncSelectionUI() {
+  const rows = filtered();
+  const all = $('#ck-all');
+  const n = state.selected.size;
+  all.checked = rows.length > 0 && rows.every(a => state.selected.has(a.id));
+  all.indeterminate = !all.checked && rows.some(a => state.selected.has(a.id));
+
+  $('#sel-n').textContent = n;
+  $('#batchbar').classList.toggle('on', n > 0);
+}
+
+/* ----------------------------------------------------------------------------
+ * 4) 上传队列
+ * 进行中的任务用一个「每 600ms 推进一档」的定时器模拟，暂停则停推。
+ * -------------------------------------------------------------------------- */
+const UPLOADS = [
+  { id: 'u1', name: 'DSC1051_P48.ARW', bytes: 48 * 1048576, pct: 62, mode: 'chunk', running: true },
+  { id: 'u2', name: 'DSC1052_P49.ARW', bytes: 39 * 1048576, pct: 100, mode: 'instant', running: false,
+    note: '服务端已存在相同指纹，秒传完成' },
+  { id: 'u3', name: 'DSC1053_P50.ARW', bytes: 55 * 1048576, pct: 12, mode: 'chunk', running: true },
+  { id: 'u4', name: 'DSC1054_P51.ARW', bytes: 27 * 1048576, pct: 34, mode: 'chunk', running: false,
+    note: '网络中断，已续传 2 次' },
+  { id: 'u5', name: 'DSC1055_P52.ARW', bytes: 61 * 1048576, pct: 78, mode: 'chunk', running: false,
+    failed: true, note: '分片校验失败，自动重试 3 次后放弃' },
+];
+const CHUNKS = 28;   // 分片网格的格数：把进度映射成可视粒度
+
+/* 上传状态映射：完成 / 秒传走 success，失败走 danger，暂停走中性降级档。
+   （暂停不是错误，语义上不该穿红衣服） */
+function upStatus(u) {
+  if (u.mode === 'instant')  return { k: 'ok',      t: '秒传命中' };
+  if (u.pct >= 100)          return { k: 'ok',      t: '已完成' };
+  if (u.failed)              return { k: 'failed',  t: '上传失败' };
+  if (!u.running && u.note)  return { k: 'paused',  t: '已暂停' };
+  return { k: 'draft', t: '上传中' };
+}
+
+function renderUploads() {
+  const live = UPLOADS.filter(u => u.pct < 100 && u.mode !== 'instant');
+  const done = UPLOADS.filter(u => u.pct >= 100 || u.mode === 'instant');
+
+  const card = u => {
+    const s = upStatus(u);
+    const doingIdx = Math.floor(u.pct / 100 * CHUNKS);
+    const cells = Array.from({ length: CHUNKS }, (_, i) =>
+      `<i class="${i < doingIdx ? 'done' : (i === doingIdx && u.running ? 'doing' : '')}"></i>`).join('');
+    return `
+      <div class="uitem" data-up="${u.id}">
+        <div class="top">
+          <svg class="ic" style="color:var(--color-text-quaternary)"><use href="#i-${u.mode === 'instant' ? 'bolt' : 'upload'}"/></svg>
+          <span class="name">${u.name}</span>
+          <span class="sz">${fmtSize(u.bytes)}</span>
+          <span class="st" data-s="${s.k}"><i class="dot"></i>${s.t}</span>
+          <button class="mini" data-uptoggle="${u.id}" title="${u.running ? '暂停' : '继续'}">
+            <svg class="ic"><use href="#i-${u.running ? 'pause' : 'play'}"/></svg></button>
+        </div>
+        <div class="pbar"><i style="width:${u.pct}%"></i></div>
+        <div class="chunks">${cells}</div>
+        ${u.note ? `<div class="sz" style="margin-top:var(--space-6)">${u.note}</div>` : ''}
+      </div>`;
+  };
+
+  $('#uq-live').innerHTML = live.map(card).join('') || '<div class="empty" style="padding:var(--space-20)">没有进行中的任务</div>';
+  $('#uq-done').innerHTML = done.map(card).join('') || '<div class="empty" style="padding:var(--space-20)">暂无记录</div>';
+  // 这里含失败与暂停的任务，因此说「未完成」而不是「进行中」
+  $('#up-summary').textContent = live.length + ' 个任务未完成 · 合计 ' +
+    fmtSize(live.reduce((s, u) => s + u.bytes, 0));
+}
+
+/* 模拟传输：运行中的任务每 600ms 前进 3~7 个百分点 */
+setInterval(() => {
+  let changed = false;
+  UPLOADS.forEach(u => {
+    if (!u.running || u.pct >= 100 || u.mode === 'instant') return;
+    u.pct = Math.min(100, u.pct + 3 + stableHash(u.id + u.pct, 5));
+    if (u.pct >= 100) { u.running = false; u.note = '分片校验通过，原片已入库'; }
+    changed = true;
+  });
+  if (changed && location.hash === '#upload') renderUploads();
+}, 600);
+
+/* ----------------------------------------------------------------------------
+ * 5) 分类与相册
+ * -------------------------------------------------------------------------- */
+function renderTree() {
+  const years = {};
+  ASSETS.forEach(a => { const y = a.date.slice(0, 4); years[y] = (years[y] || 0) + 1; });
+  const yKeys = Object.keys(years).sort().reverse();
+  const albums = [
+    { n: '风光集',   c: ASSETS.filter(a => a.cat === '风光').length },
+    { n: '城市夜行', c: ASSETS.filter(a => a.cat === '街拍' || a.cat === '建筑').length },
+    { n: '人文纪实', c: ASSETS.filter(a => a.cat === '纪实' || a.cat === '人像').length },
+  ];
+
+  $('#tree').innerHTML = `
+    <div class="node on">
+      <span class="tw"><svg class="ic"><use href="#i-asset"/></svg></span>全部资源<span class="n">${ASSETS.length}</span>
+    </div>
+    <div class="node" data-toggle="years">
+      <span class="tw"><svg class="ic"><use href="#i-chev-down"/></svg></span>按年份<span class="n">${yKeys.length}</span>
+    </div>
+    <div class="sub open" id="sub-years">
+      ${yKeys.map(y => `<div class="node"><span class="tw"></span>${y} 年<span class="n">${years[y]}</span></div>`).join('')}
+    </div>
+    <div class="node" data-toggle="albums">
+      <span class="tw"><svg class="ic"><use href="#i-chev-down"/></svg></span>相册<span class="n">${albums.length}</span>
+    </div>
+    <div class="sub open" id="sub-albums">
+      ${albums.map(a => `<div class="node"><span class="tw"></span>${a.n}<span class="n">${a.c}</span></div>`).join('')}
+    </div>`;
+}
+
+function renderTaxonomy() {
+  const catCount = {};
+  ASSETS.forEach(a => { catCount[a.cat] = (catCount[a.cat] || 0) + 1; });
+  const smart = [
+    { n: '夜景', c: 9 }, { n: '长曝光', c: 6 }, { n: '航拍', c: 4 }, { n: '逆光', c: 7 },
+    { n: '浅景深', c: 15 }, { n: '高对比', c: 11 }, { n: '对称构图', c: 8 },
+  ];
+  $('#tagcloud').innerHTML =
+    Object.entries(catCount).map(([n, c]) => `<span class="tag-pill">${n}<span class="n">${c}</span></span>`).join('') +
+    smart.map(t => `<span class="tag-pill">${t.n}<span class="n">${t.c}</span></span>`).join('');
+
+  // 人脸分组：直接复用照片缩略图当头像（原型不需要真人脸素材）
+  const FACE_SRC = [ASSETS[3], ASSETS[7], ASSETS[13], ASSETS[18], ASSETS[27], ASSETS[35]];
+  const names = ['未命名', '未命名', '陈·摄影师', '未命名', '未命名', '林·模特'];
+  $('#faces').innerHTML = FACE_SRC.map((a, i) => {
+    const named = names[i] !== '未命名';
+    return `
+      <div class="face">
+        <div class="ring"><img src="${photoUrl(a)}" alt="" loading="lazy"></div>
+        <b class="${named ? '' : 'unnamed'}">${names[i]}</b>
+        <span>${2 + stableHash(a.id + 'fc', 12)} 张</span>
+      </div>`;
+  }).join('');
+  $('#face-sub').textContent = '共 6 组 · 4 组待命名';
+}
+
+/* ----------------------------------------------------------------------------
+ * 6) EXIF 表格 + 编辑抽屉
+ * -------------------------------------------------------------------------- */
+const EXIF_FIELDS = [
+  ['f-title', 'title'], ['f-date', 'date'], ['f-place', 'place'], ['f-cam', 'cam'],
+  ['f-lens', 'lens'], ['f-focal', 'focal'], ['f-aperture', 'aperture'], ['f-iso', 'iso'],
+  ['f-speed', 'speed'], ['f-temp', 'temp'], ['f-wb', 'wb'],
+];
+let dwEditing = null;   // 当前抽屉里正在编辑的资源 id
+
+function renderExifTable() {
+  $('#exif-body').innerHTML = ASSETS.map(a => `
+    <tr data-id="${a.id}" style="cursor:pointer">
+      <td class="cell-thumb"><img src="${photoUrl(a)}" alt="" loading="lazy"></td>
+      <td><div class="fname">${a.title}</div><div class="meta">${a.file}</div></td>
+      <td>${a.cam}</td>
+      <td class="mono" style="font-size:var(--font-size-meta)">${a.lens}</td>
+      <td class="meta">${a.focal} · ${a.aperture}</td>
+      <td class="meta">ISO ${a.iso} · ${a.speed}</td>
+      <td class="meta">${a.temp}<br>${a.wb}</td>
+      <td><button class="mini" title="编辑"><svg class="ic"><use href="#i-edit"/></svg></button></td>
+    </tr>`).join('');
+}
+
+function openDrawer(id) {
+  const a = byId(id);
+  if (!a) return;
+  dwEditing = id;
+  $('#dw-thumb').src = photoUrl(a);
+  $('#dw-title').textContent = a.title;
+  $('#dw-file').textContent  = a.file;
+  EXIF_FIELDS.forEach(([el, key]) => { $('#' + el).value = a[key]; });
+  $('#f-dim').textContent  = a.w + ' × ' + a.h;
+  $('#f-size').textContent = fmtSize(a.bytes);
+  $('#f-hash').textContent = a.hash;
+  $('#dw-state').textContent = '未修改';
+  $('#drawer').classList.add('on');
+  $('#drawer').setAttribute('aria-hidden', 'false');
+  $('#scrim').classList.add('on');
+}
+
+function closeDrawer() {
+  $('#drawer').classList.remove('on');
+  $('#drawer').setAttribute('aria-hidden', 'true');
+  $('#scrim').classList.remove('on');
+  dwEditing = null;
+}
+
+/* 保存：写回内存数据 → 表格重渲染 → 保存态提示。
+   正式实现这里会 PATCH /assets/:id/metadata，并只写 sidecar 不动原片。 */
+$('#dw-save').addEventListener('click', () => {
+  if (!dwEditing) return;
+  const a = byId(dwEditing);
+  EXIF_FIELDS.forEach(([el, key]) => {
+    const v = $('#' + el).value;
+    a[key] = key === 'iso' ? (parseInt(v, 10) || a.iso) : v;   // ISO 是数字字段，单独收敛
+  });
+  $('#dw-state').textContent = '已保存';
+  renderResources(); renderExifTable();
+  toast('EXIF 已保存到 sidecar，原片未改动');
+});
+
+$('#dw-reset').addEventListener('click', () => { if (dwEditing) openDrawer(dwEditing); });
+$('#dw-close').addEventListener('click', closeDrawer);
+$('#scrim').addEventListener('click', closeDrawer);
+
+/* ----------------------------------------------------------------------------
+ * 7) RBAC 权限矩阵
+ * -------------------------------------------------------------------------- */
+const PERM_GROUPS = [
+  { name: '资源管理', perms: [
+    { k: 'asset.view',     n: '查看资源', d: '浏览与检索全部图库' },
+    { k: 'asset.upload',   n: '上传资源', d: '分片上传 / 秒传' },
+    { k: 'asset.edit',     n: '编辑资源', d: '重命名、移动、EXIF 编辑' },
+    { k: 'asset.delete',   n: '删除资源', d: '软删除进回收站' },
+    { k: 'asset.original', n: '下载原片', d: '拉取 RAW 原始文件' },
+  ]},
+  { name: '分类体系', perms: [
+    { k: 'taxo.dir',  n: '管理相册目录', d: '增删层级与移动相册' },
+    { k: 'taxo.tag',  n: '管理智能标签', d: '纠正模型打标结果' },
+    { k: 'taxo.face', n: '人脸分组命名', d: '查看并命名人脸簇' },
+  ]},
+  { name: '系统设置', perms: [
+    { k: 'sys.user',  n: '用户管理',   d: '邀请与停用账号' },
+    { k: 'sys.role',  n: '角色与权限', d: '编辑本页矩阵' },
+    { k: 'sys.audit', n: '审计日志',   d: '查看登录与操作记录' },
+  ]},
+];
+const ALL_PERMS = PERM_GROUPS.flatMap(g => g.perms.map(p => p.k));
+
+const ROLES = [
+  { k: 'owner',  n: '超级管理员', d: '内置角色 · 不可编辑', locked: true,
+    perms: new Set(ALL_PERMS) },
+  { k: 'editor', n: '内容编辑', d: '可管资源与分类，不可改系统',
+    perms: new Set(['asset.view', 'asset.upload', 'asset.edit', 'asset.original', 'taxo.dir', 'taxo.tag', 'taxo.face']) },
+  { k: 'review', n: '审核员', d: '只读 + 发布状态流转',
+    perms: new Set(['asset.view', 'asset.original', 'taxo.tag']) },
+  { k: 'uploader', n: '上传者', d: '只能投递，看不到他人资源',
+    perms: new Set(['asset.view', 'asset.upload']) },
+  { k: 'guest', n: '访客', d: '仅公开图库只读',
+    perms: new Set(['asset.view']) },
+];
+let curRole = 'editor';
+
+function renderRoles() {
+  $('#role-list').innerHTML = ROLES.map(r => `
+    <button class="role${r.k === curRole ? ' on' : ''}" data-role="${r.k}">
+      <svg class="ic"><use href="#i-${r.k === 'owner' ? 'rbac' : 'user'}"/></svg>
+      <span class="rtxt">
+        <b>${r.n}</b><i>${r.d}</i>
+      </span>
+    </button>`).join('');
+}
+
+function renderMatrix() {
+  const r = ROLES.find(x => x.k === curRole);
+  $('#matrix-title').textContent = r.n + ' · 权限矩阵';
+  $('#matrix-sub').textContent = r.locked
+    ? '内置角色，全部权限只读'
+    : r.perms.size + ' / ' + ALL_PERMS.length + ' 项已授权';
+
+  $('#matrix-body').innerHTML =
+    `<tr><th>权限项</th><th class="c">已授权</th></tr>` +
+    PERM_GROUPS.map(g => `
+      <tr class="grp"><td colspan="2">${g.name}</td></tr>` +
+      g.perms.map(p => `
+        <tr>
+          <td class="perm"><b>${p.n}</b><span>${p.d}</span></td>
+          <td class="c">
+            <input type="checkbox" class="cbx" data-perm="${p.k}"
+              ${r.perms.has(p.k) ? 'checked' : ''} ${r.locked ? 'disabled' : ''}>
+          </td>
+        </tr>`).join('')).join('');
+}
+
+/* ----------------------------------------------------------------------------
+ * 8) Toast
+ * -------------------------------------------------------------------------- */
+let toastTimer = null;
+function toast(msg) {
+  $('#toast-msg').textContent = msg;
+  $('#toast').classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $('#toast').classList.remove('on'), 2200);
+}
+
+/* ----------------------------------------------------------------------------
+ * 9) 事件绑定（全部走事件委托，避免为每行单独挂监听）
+ * -------------------------------------------------------------------------- */
+/* 侧栏 / 顶栏里带 data-goto 的按钮同样走 hash 路由 */
+$$('[data-goto]').forEach(b => b.addEventListener('click', () => { location.hash = b.dataset.goto; }));
+window.addEventListener('hashchange', () => {
+  route();
+  if (location.hash === '#upload') renderUploads();
+});
+
+/* 筛选控件 */
+$('#q').addEventListener('input', e => { state.q = e.target.value; renderResources(); });
+$('#status-sel').addEventListener('change', e => { state.status = e.target.value; renderResources(); });
+$('#cat-chips').addEventListener('click', e => {
+  const c = e.target.closest('[data-cat]');
+  if (!c) return;
+  state.cat = c.dataset.cat;
+  renderCatChips(); renderResources();
+});
+$('#btn-reload').addEventListener('click', () => toast('索引已刷新：47 个资源，0 个异常'));
+
+/* 表格：勾选 / 行内操作 / 打开抽屉 */
+$('#res-body').addEventListener('change', e => {
+  const ck = e.target.closest('[data-ck]');
+  if (!ck) return;
+  state.selected[ck.checked ? 'add' : 'delete'](ck.dataset.ck);
+  ck.closest('tr').classList.toggle('sel', ck.checked);
+  syncSelectionUI();
+});
+$('#ck-all').addEventListener('change', e => {
+  const rows = filtered();
+  rows.forEach(a => e.target.checked ? state.selected.add(a.id) : state.selected.delete(a.id));
+  renderResources();
+});
+$('#res-body').addEventListener('click', e => {
+  const btn = e.target.closest('[data-act]');
+  if (!btn) return;
+  const id = btn.closest('tr').dataset.id;
+  const act = btn.dataset.act;
+  if (act === 'exif') { location.hash = '#exif'; openDrawer(id); return; }
+  if (act === 'rename') { toast('重命名对话框（原型未展开）'); return; }
+  if (act === 'trash')  { byId(id).status = 'trash'; renderResources(); toast('已移入回收站，30 天后清除'); }
+});
+
+/* 批量操作条 */
+$('#batchbar').addEventListener('click', e => {
+  const b = e.target.closest('[data-batch]');
+  if (!b) return;
+  const op = b.dataset.batch;
+  if (op === 'clear') { state.selected.clear(); renderResources(); return; }
+  if (op === 'trash') {
+    state.selected.forEach(id => { byId(id).status = 'trash'; });
+    toast('已软删除 ' + state.selected.size + ' 项，可回收站还原');
+    state.selected.clear(); renderResources(); return;
+  }
+  toast('批量「' + b.textContent.trim() + '」作用于 ' + state.selected.size + ' 项（原型未展开对话框）');
+});
+
+/* 上传队列：暂停 / 继续 */
+$('#uq-live').addEventListener('click', e => {
+  const b = e.target.closest('[data-uptoggle]');
+  if (!b) return;
+  const u = UPLOADS.find(x => x.id === b.dataset.uptoggle);
+  u.running = !u.running;
+  // 点「继续」对失败任务等于「重试」；点「暂停」则落回暂停态
+  if (u.running) { u.note = ''; u.failed = false; } else { u.note = '已暂停，续传点已保存'; }
+  renderUploads();
+});
+$('#uq-done').addEventListener('click', () => toast('已完成任务不可暂停'));
+$('#btn-allpause').addEventListener('click', () => {
+  // 失败的任务不属于「暂停」管辖范围，跳过，避免把它伪装成暂停态
+  UPLOADS.forEach(u => { if (u.pct < 100 && u.mode !== 'instant' && !u.failed) { u.running = false; u.note = '已暂停，续传点已保存'; } });
+  renderUploads(); toast('全部任务已暂停');
+});
+$('#btn-allresume').addEventListener('click', () => {
+  // 对失败的任务语义是「重试」：清掉 failed 标记后重新推进
+  UPLOADS.forEach(u => { if (u.pct < 100 && u.mode !== 'instant') { u.running = true; u.failed = false; u.note = ''; } });
+  renderUploads(); toast('全部任务继续上传');
+});
+$('#btn-rescan').addEventListener('click', () => toast('智能标签与人脸聚类已重新扫描'));
+
+/* EXIF 行点击（点按钮也走同一处，避免两套逻辑） */
+$('#exif-body').addEventListener('click', e => {
+  const tr = e.target.closest('tr[data-id]');
+  if (tr) openDrawer(tr.dataset.id);
+});
+$('#btn-exif-export').addEventListener('click', () => toast('已导出 47 行 EXIF 为 CSV（原型不落盘）'));
+
+/* 目录树展开收起 */
+$('#tree').addEventListener('click', e => {
+  const n = e.target.closest('.node');
+  if (!n) return;
+  if (n.dataset.toggle) { $('#sub-' + n.dataset.toggle).classList.toggle('open'); return; }
+  $$('#tree .node').forEach(x => x.classList.remove('on'));
+  n.classList.add('on');
+});
+
+/* RBAC */
+$('#role-list').addEventListener('click', e => {
+  const b = e.target.closest('[data-role]');
+  if (!b) return;
+  curRole = b.dataset.role;
+  renderRoles(); renderMatrix();
+});
+$('#matrix-body').addEventListener('change', e => {
+  const ck = e.target.closest('[data-perm]');
+  if (!ck) return;
+  const r = ROLES.find(x => x.k === curRole);
+  ck.checked ? r.perms.add(ck.dataset.perm) : r.perms.delete(ck.dataset.perm);
+  renderMatrix();
+});
+$('#btn-save-rbac').addEventListener('click', () => {
+  toast('角色「' + ROLES.find(r => r.k === curRole).n + '」权限已保存');
+});
+
+/* Esc 关闭抽屉 */
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+/* ----------------------------------------------------------------------------
+ * 10) 启动
+ * -------------------------------------------------------------------------- */
+renderCatChips();
+renderResources();
+renderUploads();
+renderTree();
+renderTaxonomy();
+renderExifTable();
+renderRoles();
+renderMatrix();
+route();
+</script>
+</body>
+</html>

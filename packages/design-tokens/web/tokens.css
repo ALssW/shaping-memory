@@ -1,0 +1,276 @@
+/* ==========================================================================
+ * packages/design-tokens/web/tokens.css
+ *
+ * 塑忆设计语言 —— Web 端 Token 产物（CSS 变量 + 语义工具类）
+ *
+ * 【唯一事实源】
+ *   packages/design-tokens/tokens.json（DTCG 格式）
+ *   本文件不是由 tokens.json 自动生成的，而是由人手工对齐。
+ *   改 token 的唯一流程：
+ *     1) 先改 tokens.json
+ *     2) 同步改本文件（以及 web/tokens.ts）
+ *     3) 跑校验脚本：node packages/design-tokens/scripts/check-tokens.mjs
+ *   校验失败不得提交。产物中禁止出现 tokens.json 之外的新数值。
+ *
+ * 【命名规则】见 docs/设计语言-Token规范.md §2.1
+ *   DTCG 路径各级原样拼接，不做任何变形：
+ *     color.text.secondary  -> --color-text-secondary
+ *     blur.xxl              -> --blur-xxl
+ *     size.icon-button.default -> --size-icon-button-default
+ *   原型里 --text-text / --mat-thick / --overlay-blur-md 属已知偏差（规范 §7.1），
+ *   正式工程不得沿用。
+ *
+ * 【本文件内容边界】
+ *   只声明变量与语义工具类，不含任何布局与 reset。主题基线在 web/theme.css。
+ * ========================================================================== */
+
+:root {
+  /* ------------------------------------------------------------------
+   * color.* —— 暗色是唯一方案。层级靠「沿同一族向下走」表达，不靠换色相。
+   * ------------------------------------------------------------------ */
+  --color-background: #1c1c1e; /* 唯一背景色，也是 accent 对比度校验的基准底色 */
+  --color-accent: #e8a33c; /* 站点级强调色，可被后端 siteConfig 覆盖 */
+  --color-accent-secondary: #c98a2e; /* 强调色的压低版本，仅用于渐变末端 */
+  /* 语义状态色：只表「状态」，不参与层级表达（规范 §1.3） */
+  --color-danger: #ff453a; /* 失败态 / 软删除等破坏性状态、删除类操作 */
+  --color-success: #30d158; /* 操作成功的结果反馈 */
+
+  --color-text-base: #f5f5f7;
+  --color-text-secondary: rgba(245, 245, 247, 0.62);
+  --color-text-tertiary: rgba(245, 245, 247, 0.44);
+  --color-text-quaternary: rgba(245, 245, 247, 0.3);
+  --color-text-quinary: rgba(245, 245, 247, 0.2);
+
+  --color-fill-base: rgba(255, 255, 255, 0.075);
+  --color-fill-secondary: rgba(255, 255, 255, 0.06);
+  --color-fill-tertiary: rgba(255, 255, 255, 0.045);
+  --color-fill-quaternary: rgba(255, 255, 255, 0.03);
+
+  --color-border-base: rgba(255, 255, 255, 0.1); /* 中性发丝描边 */
+  --color-border-on-photo: rgba(255, 255, 255, 0.1); /* 直接压在照片上的描边 */
+
+  /* 半透明材质填充，共 6 档；必须与 blur.* 成对使用，否则只是半透明色块 */
+  --color-material-opaque: rgba(24, 24, 26, 0.92);
+  --color-material-ultra-thick: rgba(30, 30, 32, 0.86);
+  --color-material-thick: rgba(36, 36, 39, 0.72);
+  --color-material-medium: rgba(40, 40, 43, 0.55);
+  --color-material-thin: rgba(44, 44, 47, 0.35);
+  --color-material-ultra-thin: rgba(48, 48, 51, 0.18);
+
+  /* ------------------------------------------------------------------
+   * opacity.* —— 强调色是「色调」不是「填充」。
+   * 数值与 color.accent 相乘使用，绝不把 accent 的 rgba 写死。
+   * ------------------------------------------------------------------ */
+  --opacity-accent-border: 0.2; /* 玻璃面描边 */
+  --opacity-accent-wash: 0.12; /* 玻璃面淡洗 / 激活态背景 */
+  --opacity-accent-hover: 0.1; /* 文字按钮 hover 背景 */
+  --opacity-accent-subtle: 0.05; /* 极淡的强调色倾向 */
+  --opacity-accent-selection: 0.3; /* 文本选区高亮（::selection） */
+  /* 语义状态色（danger / success）与 accent 同形的低透明度档位 */
+  --opacity-state-border: 0.2; /* 状态徽章 / 提示条描边 */
+  --opacity-state-wash: 0.12; /* 状态徽章背景 / 破坏性按钮淡底 */
+  --opacity-state-hover: 0.1; /* 破坏性文字按钮 hover 背景 */
+  --opacity-disabled: 0.4; /* 禁用态 */
+
+  /* ------------------------------------------------------------------
+   * blur.* —— 按「角色」选，只有三档，禁止引入第四档。
+   * ------------------------------------------------------------------ */
+  --blur-sm: 6px; /* 模态背后的遮罩 / scrim */
+  --blur-md: 14px; /* 压在照片上的二级控件 */
+  --blur-xxl: 38px; /* 悬浮面板、菜单、浮层、Toast、查看器外壳 */
+
+  /* ------------------------------------------------------------------
+   * radius.* —— 圆角映射容器尺寸；容器比它内部的条目圆一档。
+   * ------------------------------------------------------------------ */
+  --radius-xxl: 20px; /* 对话框、hover 卡、Toast、Hero 块 */
+  --radius-xl: 16px; /* 菜单、气泡、中等卡片、照片项 */
+  --radius-lg: 12px; /* 分段控件、输入框、头部按钮 */
+  --radius-md: 9px; /* 分段项、列表行、EXIF 行 */
+  --radius-sm: 7px; /* 最小内部条目 */
+  --radius-full: 999px; /* 圆形图标按钮、胶囊徽章、chip */
+
+  /* ------------------------------------------------------------------
+   * space.* —— 4px 基准栅格，命名即像素值。
+   * ------------------------------------------------------------------ */
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-64: 64px; /* 模块顶部留白，用于避开 48px 悬浮导航 */
+
+  /* ------------------------------------------------------------------
+   * size.* —— 控件尺寸。圆形图标按钮只有两档，不得自创第三档。
+   * ------------------------------------------------------------------ */
+  --size-icon-button-default: 32px;
+  --size-icon-button-compact: 28px;
+  --size-icon-default: 18px; /* 图标字形尺寸，配 icon-button.default 使用 */
+  --size-icon-compact: 16px; /* 图标字形尺寸，配 icon-button.compact 使用 */
+  --size-button-xs: 24px;
+  --size-button-sm: 32px; /* 文字按钮默认档 */
+  --size-button-md: 40px;
+  --size-button-lg: 44px;
+  --size-button-xl: 48px;
+  --size-chip: 26px;
+  --size-header: 48px; /* 悬浮页头高度（fixed） */
+  --size-timeline-track: 16px; /* 时间线进度轨可拖拽命中区宽度（视觉细线 3px） */
+
+  /* ------------------------------------------------------------------
+   * font.* —— 家族输出为逗号拼接的 font-family 字符串：
+   * 数组元素逐个加引号，ui-sans-serif / system-ui / ui-monospace /
+   * sans-serif / serif / monospace 这类通用族不加引号。
+   * ------------------------------------------------------------------ */
+  --font-family-sans: "Geist", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", ui-sans-serif,
+    system-ui, sans-serif;
+  --font-family-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", serif;
+  --font-family-mono: ui-monospace, "SF Mono", "Menlo", "Consolas", "Liberation Mono", monospace;
+
+  /* 字号刻意偏密：body / meta 覆盖 UI 中绝大多数文字 */
+  --font-size-caption: 10px; /* 徽章、角标、极次要说明 */
+  --font-size-meta: 11px; /* EXIF、时间戳、计数等元信息 */
+  --font-size-label: 12px; /* 导航项、chip、分段控件、次级正文 */
+  --font-size-body: 13px; /* 正文默认档 */
+  --font-size-heading: 15px; /* 区块标题、日期大号数字 */
+  --font-size-title: 19px; /* 年份大标题（衬线） */
+  --font-size-hero: 30px; /* 空态 / Hero 标题 */
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* 宽字距只用于全大写拉丁 / 数字标签，中文不加字距 */
+  --font-tracking-tight: -0.01em;
+  --font-tracking-normal: 0em;
+  --font-tracking-wide: 0.01em;
+  --font-tracking-meta: 0.02em;
+  --font-tracking-brand: 0.14em;
+
+  --font-leading-tight: 1.2;
+  --font-leading-snug: 1.35;
+  --font-leading-normal: 1.5;
+  --font-leading-relaxed: 1.7;
+
+  /* ------------------------------------------------------------------
+   * elevation.* —— 配方型 token（规范 §2.2 / §4.4）。
+   * 这里把配方 materialize 成完整可用的 box-shadow 字符串：
+   *   tint 为 {color.accent} 的层 -> color-mix(in srgb, var(--color-accent) N%, transparent)
+   *   tint 为 #000000 的层        -> rgba(0, 0, 0, alpha)
+   * 之所以对 accent 层用 color-mix，是为了在换 accent 时自动跟随（规范 §1.2）。
+   * 一道硬阴影是错的；任何玻璃面优先用 --elevation-neutral。
+   * ------------------------------------------------------------------ */
+  --elevation-context: 0 8px 32px color-mix(in srgb, var(--color-accent) 8%, transparent),
+    0 4px 16px color-mix(in srgb, var(--color-accent) 6%, transparent),
+    0 2px 8px rgba(0, 0, 0, 0.1);
+  --elevation-neutral: 0 6px 24px rgba(0, 0, 0, 0.067), 0 3px 10px rgba(0, 0, 0, 0.067),
+    0 1px 4px rgba(0, 0, 0, 0.067);
+
+  /* ------------------------------------------------------------------
+   * motion.* —— 非空间状态（opacity / color）走 duration + easing。
+   * 改变位置或尺寸的空间运动必须走 spring：motion.spring.* 在 CSS 侧不输出变量
+   * （规范 §2.2），Web 用下面的 easing 作近似。
+   * ------------------------------------------------------------------ */
+  --motion-duration-fast: 150ms; /* 按下态即时反馈 */
+  --motion-duration-base: 200ms; /* hover / focus / active 默认档 */
+  --motion-duration-slow: 300ms; /* 较慢的淡入与揭示 */
+  --motion-easing-smooth: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --motion-easing-snappy: cubic-bezier(0.34, 1.3, 0.5, 1);
+  /* 对称 ease-in-out：起止都慢，专给刻度标签换边这类「两端都要停下来」的位移 */
+  --motion-easing-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+
+  /* ------------------------------------------------------------------
+   * z.* —— 两套体系：Surface 层与 Intra-surface 层。
+   * 禁止取用这两张表以外的数值。
+   * ------------------------------------------------------------------ */
+  --z-surface-chrome: 30; /* 常驻页面外壳 */
+  --z-surface-scrim: 40; /* 模态背后的遮罩 */
+  --z-surface-modal: 50; /* 模态面：对话框、抽屉、查看器 */
+  --z-surface-popover: 60; /* 从模态面派生的浮层 */
+  --z-surface-toast: 70; /* Toast，永远最上 */
+  --z-inset-hairline: 1; /* 面内：发丝边框与结构渐变 */
+  --z-inset-decoration: 10; /* 面内：装饰、hover 遮罩、图片叠层 */
+  --z-inset-badge: 20; /* 面内：徽章与内联操作 */
+  --z-inset-chrome: 30; /* 面内：工具条 */
+}
+
+/* ==========================================================================
+ * 语义工具类
+ *
+ * 原型里已经在用的习惯用法，这里保留，但全部改写为新变量名。
+ * 它们只负责「背景 / 描边 / 阴影 / 字色」这一层，不含布局与尺寸。
+ * ========================================================================== */
+
+/* --------------------------------------------------------------------------
+ * 材质层 .mat-* —— 背景 + 匹配的 backdrop-filter，必须成对使用。
+ * 角色对应见规范 §3.3：
+ *   opaque 是全遮蔽背板（查看器背景），用 blur.sm(6px)；
+ *   ultra-thick / thick / medium / thin / ultra-thin 都压在照片上，用 blur.md(14px)。
+ * -------------------------------------------------------------------------- */
+.mat-opaque {
+  background-color: var(--color-material-opaque);
+  backdrop-filter: blur(var(--blur-sm));
+}
+.mat-ultra-thick {
+  background-color: var(--color-material-ultra-thick);
+  backdrop-filter: blur(var(--blur-md));
+}
+.mat-thick {
+  background-color: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-md));
+}
+.mat-medium {
+  background-color: var(--color-material-medium);
+  backdrop-filter: blur(var(--blur-md));
+}
+.mat-thin {
+  background-color: var(--color-material-thin);
+  backdrop-filter: blur(var(--blur-md));
+}
+.mat-ultra-thin {
+  background-color: var(--color-material-ultra-thin);
+  backdrop-filter: blur(var(--blur-md));
+}
+
+/* --------------------------------------------------------------------------
+ * 玻璃面 .glass —— 只有 accent 着色阴影，无描边。
+ * 深度来自「材质 + 模糊 + 叠加透明层」，一道描边或硬阴影都是错的（规范 §4.4）。
+ * -------------------------------------------------------------------------- */
+.glass {
+  box-shadow: var(--elevation-context);
+}
+
+/* 中性玻璃面：只有中性阴影，无描边。不需要 accent 倾向时优先用它 */
+.glass-neutral {
+  box-shadow: var(--elevation-neutral);
+}
+
+/* --------------------------------------------------------------------------
+ * 语义文字色 —— 层级靠「沿同一族向下走」表达
+ * -------------------------------------------------------------------------- */
+.t-text {
+  color: var(--color-text-base);
+}
+.t-sec {
+  color: var(--color-text-secondary);
+}
+.t-ter {
+  color: var(--color-text-tertiary);
+}
+.t-qua {
+  color: var(--color-text-quaternary);
+}
+.t-acc {
+  color: var(--color-accent);
+}
+/* 状态语义文字色（规范 §1.3）——只表状态，不参与层级表达 */
+.t-danger {
+  color: var(--color-danger);
+}
+.t-success {
+  color: var(--color-success);
+}

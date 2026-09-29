@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 128 128" role="img" aria-label="单点 AF 对焦框 · 合焦">
+  <title>光标 · 悬停可点（单点 AF · 合焦绿）</title>
+  <!--
+    与 af-normal 完全同形同位，只把面层由白换成绿 ——
+    「对焦框亮起 = 合焦」是相机的通用语，这里借来表示「这里可以点」。
+    绿色取 token color.success #30d158（本设计系统里唯一的绿）。
+
+    底衬与尺寸说明见 af-normal.svg（整体为原设计的 50%）。
+  -->
+  <path d="M44 44H84V84H44Z M56 56H72V72H56Z" fill="#18181A" fill-rule="evenodd"/>
+  <path d="M48 48H80V80H48Z M52 52H76V76H52Z" fill="#30D158" fill-rule="evenodd"/>
+</svg>

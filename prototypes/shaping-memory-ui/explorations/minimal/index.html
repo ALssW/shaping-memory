@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>极简晨光 · 塑忆</title>
+<style>
+:root{
+  --bg:#f6f4ef; --surface:#ffffff; --line:#e7e1d6;
+  --text:#232733; --text-sub:#7a7f8c; --text-faint:#b3b3ad;
+  --acc:#b9773f; --acc-weak:#f1e6da;
+  --r-sm:6px; --r-md:10px; --r-lg:16px;
+  --shadow-sm:0 1px 2px rgba(31,36,48,.05); --shadow-md:0 8px 28px rgba(31,36,48,.10);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+.serif{font-family:"Songti SC","STSong","Noto Serif CJK SC",Georgia,"Times New Roman",serif}
+.mono{font-family:"SF Mono","JetBrains Mono",Menlo,Consolas,monospace}
+
+/* ---------- 顶部导航 ---------- */
+.topnav{position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);
+  background:rgba(246,244,239,.85);border-bottom:1px solid var(--line)}
+.nav-inner{max-width:1200px;margin:0 auto;padding:0 24px;height:62px;
+  display:flex;align-items:center;justify-content:space-between}
+.brand{font-size:17px;font-weight:600;letter-spacing:.02em}
+.brand b{color:var(--acc);font-weight:600}
+.nav-links{display:flex;gap:30px;list-style:none}
+.nav-links a{text-decoration:none;color:var(--text-sub);font-size:14px;
+  padding:6px 2px;border-bottom:2px solid transparent;transition:.2s}
+.nav-links a.on,.nav-links a:hover{color:var(--text);border-color:var(--acc)}
+.nav-actions{display:flex;align-items:center;gap:10px}
+.iconbtn{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--surface);
+  display:grid;place-items:center;cursor:pointer;color:var(--text-sub);transition:.2s}
+.iconbtn:hover{color:var(--text);border-color:var(--acc)}
+.btn{display:inline-flex;align-items:center;gap:8px;background:var(--acc);color:#fff;
+  border:none;border-radius:var(--r-md);padding:9px 18px;font-size:14px;cursor:pointer;transition:.2s}
+.btn:hover{filter:brightness(1.05)}
+.btn.ghost{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+
+/* ---------- Hero ---------- */
+.hero{max-width:1200px;margin:0 auto;padding:74px 24px 40px;display:grid;grid-template-columns:1.1fr .9fr;gap:48px;align-items:center}
+.hero h1{font-size:clamp(32px,5vw,56px);line-height:1.12;font-weight:600;letter-spacing:.01em}
+.hero h1 em{font-style:normal;color:var(--acc)}
+.hero p{color:var(--text-sub);font-size:16px;line-height:1.8;margin:18px 0 28px;max-width:520px}
+.hero-cta{display:flex;gap:14px}
+.hero-stats{display:flex;gap:40px;margin-top:34px}
+.stat .n{font-size:24px;font-weight:600}.stat .l{font-size:12px;color:var(--text-faint)}
+.hero-img{position:relative}
+.hero-img img{width:100%;height:400px;object-fit:cover;border-radius:var(--r-lg);box-shadow:var(--shadow-md)}
+.hero-badge{position:absolute;left:20px;bottom:-18px;background:var(--surface);border:1px solid var(--line);
+  padding:12px 18px;border-radius:var(--r-md);box-shadow:var(--shadow-sm);display:flex;gap:16px;align-items:center;
+  font-size:12px;color:var(--text-sub)}
+.hero-badge .v{font-weight:600;color:var(--text)}
+
+/* ---------- 分类 + 网格 ---------- */
+.section{max-width:1200px;margin:0 auto;padding:56px 24px 20px}
+.sec-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:22px}
+.sec-head h2{font-size:26px;font-weight:600}
+.chips{display:flex;gap:10px;flex-wrap:wrap}
+.chip{padding:7px 16px;border:1px solid var(--line);border-radius:99px;background:var(--surface);
+  font-size:13px;color:var(--text-sub);cursor:pointer;transition:.2s}
+.chip.on{background:var(--text);color:var(--surface);border-color:var(--text)}
+.grid{margin:0 auto;max-width:1200px;padding:8px 24px 12px;columns:3;column-gap:20px}
+.card{break-inside:avoid;margin-bottom:20px;overflow:hidden;border-radius:var(--r-lg);
+  background:var(--surface);border:1px solid var(--line);cursor:pointer;transition:transform .25s ease,box-shadow .25s ease}
+.card:hover{transform:translateY(-4px);box-shadow:var(--shadow-md)}
+.card img{width:100%;display:block}
+.card-meta{padding:14px 16px 16px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.card-meta h3{font-size:15px;font-weight:600}
+.card-meta .cat{font-size:12px;color:var(--acc)}
+.card-meta .meta{font-size:11px;color:var(--text-faint);margin-top:4px}
+.like{color:var(--text-faint);font-size:13px;display:inline-flex;gap:4px;align-items:center}
+
+/* ---------- 工具条 ---------- */
+.toolbar{max-width:1200px;margin:0 auto;padding:34px 24px 6px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.tool-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;transition:.2s;cursor:pointer}
+.tool-card:hover{border-color:var(--acc)}
+.tool-card .t{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.tool-card p{font-size:12px;color:var(--text-sub);line-height:1.6}
+
+/* ---------- Lightbox ---------- */
+.lightbox{position:fixed;inset:0;background:rgba(29,32,40,.6);backdrop-filter:blur(6px);
+  display:none;align-items:center;justify-content:center;z-index:100;padding:24px}
+.lightbox.open{display:flex}
+.lb-card{display:grid;grid-template-columns:1.4fr 1fr;max-width:1000px;width:100%;max-height:88vh;
+  background:var(--surface);border-radius:var(--r-lg);overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.3)}
+.lb-img{height:88vh;object-fit:cover;display:block;width:100%}
+.lb-info{padding:26px 28px;overflow-y:auto;display:flex;flex-direction:column}
+.lb-info h3{font-size:24px;font-weight:600;margin-bottom:4px}
+.lb-info .place{font-size:13px;color:var(--text-sub);margin-bottom:6px}
+.exif{margin:16px 0;border-top:1px solid var(--line);padding-top:14px;
+  display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.exif div{font-size:12px;color:var(--text-sub)}
+.exif div b{display:block;color:var(--text);font-weight:600;font-size:13px;margin-top:2px}
+.lb-close{position:absolute;top:28px;right:32px;color:#fff;font-size:26px;cursor:pointer;line-height:1}
+
+/* ---------- App 手机壳 ---------- */
+.appside{max-width:1200px;margin:70px auto 30px;padding:0 24px}
+.appside .head{text-align:center;margin-bottom:26px}
+.appside .head h2{font-size:26px;font-weight:600}
+.appside .head p{color:var(--text-sub);font-size:13px;margin-top:6px}
+.phone-wrap{display:flex;justify-content:center}
+.phone{width:360px;height:760px;border-radius:46px;background:#0e0f13;padding:12px;
+  box-shadow:0 40px 90px rgba(0,0,0,.35)}
+.phone-screen{position:relative;width:100%;height:100%;border-radius:36px;background:var(--bg);
+  overflow:hidden;display:flex;flex-direction:column;color:var(--text)}
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:150px;height:26px;
+  background:#0e0f13;border-radius:0 0 16px 16px;z-index:5}
+.app-body{flex:1;overflow-y:auto;padding:44px 16px 0;background:var(--bg)}
+.app-brand{font-size:16px;font-weight:600;margin-bottom:4px}
+.app-sub{font-size:11px;color:var(--text-sub);margin-bottom:14px}
+.app-imgrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.app-imgrow .w2{grid-column:span 2}
+.app-img,.app-img-sm{border-radius:10px;width:100%;object-fit:cover;cursor:pointer}
+.app-img{height:200px}.app-img-sm{height:140px}
+.app-footer{display:flex;border-top:1px solid var(--line);background:var(--surface)}
+.app-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 0 14px;
+  font-size:10px;color:var(--text-faint);cursor:pointer}
+.app-tab.on{color:var(--acc)}
+.app-tab svg{width:21px;height:21px}
+
+footer{margin:40px auto;max-width:1200px;padding:30px 24px;border-top:1px solid var(--line);
+  color:var(--text-faint);font-size:12px;text-align:center}
+@media(max-width:960px){.hero{grid-template-columns:1fr;padding-top:48px}.grid{columns:2}
+  .toolbar{grid-template-columns:1fr 1fr}.lb-card{grid-template-columns:1fr;overflow-y:auto}.lb-img{height:50vh}}
+@media(max-width:560px){.grid{columns:1}.nav-links{display:none}.toolbar{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:no-preference){
+  .card,.hero h1,.hero p,.hero-img{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+  .card:nth-child(2){animation-delay:.05s}.card:nth-child(3){animation-delay:.1s}
+  .card:nth-child(4){animation-delay:.15s}.card:nth-child(5){animation-delay:.2s}
+  @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+}
+</style>
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<nav class="topnav">
+  <div class="nav-inner">
+    <div class="brand">Shaping<b>Memory</b></div>
+    <ul class="nav-links">
+      <li><a href="#" class="on">首页</a></li>
+      <li><a href="#works">作品</a></li>
+      <li><a href="#works">影集</a></li>
+      <li><a href="#tools">工具</a></li>
+      <li><a href="#app">关于</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button class="iconbtn" id="btnSearch" aria-label="搜索">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      </button>
+      <button class="btn">上传作品</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<header class="hero">
+  <div>
+    <h1>把光影，<em>塑形</em>成记忆</h1>
+    <p>私人塑忆，沉淀每一次快门的感动。以摄影作品展示、专业工具与相册管理为核心，守护你的影像资产。</p>
+    <div class="hero-cta">
+      <button class="btn">浏览作品
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+      <button class="btn ghost">开始整理</button>
+    </div>
+    <div class="hero-stats">
+      <div class="stat"><div class="n serif">1,284</div><div class="l">幅作品</div></div>
+      <div class="stat"><div class="n serif">42</div><div class="l">组影集</div></div>
+      <div class="stat"><div class="n serif">6</div><div class="l">年记录</div></div>
+    </div>
+  </div>
+  <div class="hero-img">
+    <img id="heroImg" alt="晨雾山谷">
+    <div class="hero-badge">
+      <span>Sony A7R IV</span>
+      <span class="v">24mm · f/4.0</span>
+      <span>1/400s</span>
+    </div>
+  </div>
+</header>
+
+<!-- 分类 + 网格 -->
+<div class="section" id="works">
+  <div class="sec-head">
+    <h2 class="serif">精选作品</h2>
+    <div class="chips" id="chips"></div>
+  </div>
+</div>
+<div class="grid" id="grid"></div>
+
+<!-- 工具 -->
+<div class="section" id="tools">
+  <div class="sec-head"><h2 class="serif">摄影工具集</h2><p style="color:var(--text-sub);font-size:13px">即点即用，纯前端计算</p></div>
+</div>
+<div class="toolbar" id="toolbar"></div>
+
+<!-- App 壳 -->
+<section class="appside" id="app">
+  <div class="head">
+    <h2 class="serif">移动端 App 预览</h2>
+    <p>同一套内容，底部导航已可切换到「工具」体验计算器</p>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="notch"></div>
+        <div class="app-body" id="appBody">
+          <div class="app-brand">Shaping Memory</div>
+          <div class="app-sub">古月 · 365 幅作品</div>
+          <div class="app-imgrow" id="appGrid"></div>
+        </div>
+        <div class="app-footer" id="appTabs"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>Shaping Memory 塑忆 · 极简晨光风格预览（界面原型，未接入真实数据）</footer>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox">
+  <span class="lb-close" id="lbClose">✕</span>
+  <div class="lb-card" id="lbCard"></div>
+</div>
+
+<script src="../../mock.js"></script>
+<script>
+const grid = document.getElementById('grid');
+const chips = document.getElementById('chips');
+const toolbar = document.getElementById('toolbar');
+const appGrid = document.getElementById('appGrid');
+const appTabs = document.getElementById('appTabs');
+const appBody = document.getElementById('appBody');
+const lb = document.getElementById('lightbox');
+let curCat = '全部';
+let likes = {};
+
+// 工具图标（Lucide 内联合并使用，规避外部依赖）
+const icons = {
+  nd:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>',
+  dof:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M7 4v5M17 4v5M7 15v5M17 15v5M4 7h16M4 17h16"/></svg>',
+  ev:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 18 0 9 9 0 0 1-18 0z"/><path d="M9 9.5 15 9.5M9 12h6M9 14.5h4"/></svg>',
+};
+
+PHOTOS.forEach(p => p.url = photoUrl(p));
+document.getElementById('heroImg').src = PHOTOS[0].url;
+
+// ---- 分类 chips ----
+CATEGORIES.forEach(c => {
+  const b = document.createElement('button');
+  b.className = 'chip' + (c === curCat ? ' on' : '');
+  b.textContent = c;
+  b.onclick = () => { curCat = c; renderChips(); renderGrid(); };
+  chips.appendChild(b);
+});
+function renderChips(){ [...chips.children].forEach(c => c.classList.toggle('on', c.textContent === curCat)); }
+
+// ---- 桌面网格 ----
+function renderGrid(){
+  const list = curCat === '全部' ? PHOTOS : PHOTOS.filter(p => p.cat === curCat);
+  grid.innerHTML = '';
+  list.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `
+      <img src="${p.url}" alt="${p.title}" loading="lazy">
+      <div class="card-meta">
+        <div><h3 class="serif">${p.title}</h3>
+          <div class="cat">${p.cat} · ${p.focal} ${p.aperture}</div>
+          <div class="meta">${p.place} · ${p.date}</div>
+        </div>
+        <span class="like">${likes[p.id] ? '♥' : '♡'} ${likes[p.id] ?? p.likes}</span>
+      </div>`;
+    div.onclick = () => openLightbox(p);
+    grid.appendChild(div);
+  });
+}
+
+// ---- 工具卡 ----
+TOOL_LIST.forEach(t => {
+  const d = document.createElement('div');
+  d.className = 'tool-card';
+  d.innerHTML = `<div class="t">${icons[t.key]} ${t.name}</div><p>${t.desc}</p>`;
+  toolbar.appendChild(d);
+});
+
+// ---- Lightbox / EXIF ----
+function openLightbox(p){
+  lbCard.innerHTML = `
+    <img class="lb-img" src="${p.url}" alt="${p.title}">
+    <div class="lb-info">
+      <h3 class="serif">${p.title}</h3>
+      <div class="place">${p.place} · ${p.date}</div>
+      <p style="color:var(--text-sub);font-size:13px;line-height:1.7">这张照片记录了 ${p.place} 的瞬间，拍摄于 ${p.date}。数据已由 EXIF 引擎自动解析并入库。</p>
+      <div class="exif">
+        <div>相机<b>${p.cam}</b></div>
+        <div>镜头<b>${p.lens}</b></div>
+        <div>焦距<b>${p.focal}</b></div>
+        <div>光圈<b>${p.aperture}</b></div>
+        <div>快门<b>${p.speed}</b></div>
+        <div>ISO<b>${p.iso}</b></div>
+        <div>白平衡<b>${p.wb}</b></div>
+        <div>色温<b>${p.temp}</b></div>
+      </div>
+      <button class="btn" style="margin-top:auto;width:100%;margin-top:20px;">下载原图</button>
+    </div>`;
+  lb.classList.add('open');
+}
+lbClose.onclick = () => lb.classList.remove('open');
+lb.onclick = e => { if (e.target === lb) lb.classList.remove('open'); };
+
+// ---- App 端渲染 ----
+function renderAppGrid(photos){
+  appGrid.innerHTML = '';
+  photos.forEach((p, i) => {
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    if (i % 3 === 0 && imgWide(i)) img.className = 'app-img w2'; else img.className = 'app-img-sm';
+    img.src = p.url; img.alt = p.title; img.dataset.id = p.id;
+    img.onclick = () => openLightbox(p);
+    appGrid.appendChild(img);
+  });
+}
+function imgWide(i){ return i === 0 || i === 3; } // 视觉节奏铺排
+
+// App 底部导航
+const APP_TABS = [
+  { key:'home', label:'首页', svg:icons.dof },
+  { key:'grid', label:'作品', svg:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>' },
+  { key:'tool', label:'工具', svg:icons.nd },
+  { key:'me', label:'我的', svg:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>' },
+];
+let curTab = 'home';
+function renderTabs(){
+  appTabs.innerHTML = '';
+  APP_TABS.forEach(t => {
+    const d = document.createElement('div');
+    d.className = 'app-tab' + (t.key === curTab ? ' on' : '');
+    d.innerHTML = t.svg + `<span>${t.label}</span>`;
+    d.onclick = () => switchTab(t.key);
+    appTabs.appendChild(d);
+  });
+}
+function switchTab(key){
+  curTab = key;
+  renderTabs();
+  if (key === 'home'){ appBody.innerHTML = `<div class="app-brand">Shaping Memory</div><div class="app-sub">古月 · 365 幅作品</div><div class="app-imgrow" id="appGrid"></div>`; renderAppGrid(PHOTOS.slice(0,6)); }
+  else if (key === 'grid'){ appBody.innerHTML = `<div class="app-brand">全部作品</div><div class="app-sub">按上传时间</div><div class="app-imgrow" id="appGrid"></div>`; renderAppGrid(PHOTOS); }
+  else if (key === 'tool'){ appBody.innerHTML = toolAppHTML(); bindToolApp(); }
+  else { appBody.innerHTML = `<div class="app-brand">我的</div><div class="app-sub">账号与收藏</div><div style="padding:20px;border:1px dashed var(--line);border-radius:12px;color:var(--text-sub);font-size:13px">收藏、关注与设置将在此呈现</div>`; }
+  appBody.scrollTop = 0;
+}
+// App 工具页：ND 长曝光计算器
+function toolAppHTML(){
+  return `
+    <div class="app-brand">摄影工具</div>
+    <div class="app-sub">长曝光 · ND 计算</div>
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px">
+      <label style="font-size:12px;color:var(--text-sub)">当前快门速度（秒）</label>
+      <input id="ndBase" type="number" value="1" step="0.1" style="width:100%;margin:8px 0 14px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:15px">
+      <label style="font-size:12px;color:var(--text-sub)">ND 减光档位（档）</label>
+      <input id="ndStops" type="number" value="3" min="1" step="1" style="width:100%;margin:8px 0 16px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:15px">
+      <button class="btn" style="width:100%" onclick="calcND()">计算结果</button>
+      <div id="ndOut" style="margin-top:14px;font-size:13px;color:var(--text-sub)"></div>
+    </div>`;
+}
+function calcND(){
+  const base = parseFloat(document.getElementById('ndBase').value) || 1;
+  const stops = parseInt(document.getElementById('ndStops').value) || 0;
+  const out = base * Math.pow(2, stops);
+  document.getElementById('ndOut').innerHTML =
+    `目标快门约 <b style="color:var(--acc);font-size:18px">${formatTime(out)}</b><br>
+     <span style="font-size:11px">换算公式：初始 ${base}s × 2^${stops} = ${out.toFixed(1)}s</span>`;
+}
+function formatTime(s){
+  if (s >= 60){ const m = s/60; return m >= 60 ? (m/60).toFixed(1)+' 小时' : m.toFixed(1)+' 分钟'; }
+  if (s < 1) return '1/'+Math.round(1/s)+' s';
+  return s.toFixed(1)+' 秒';
+}
+
+// 初始化
+renderChips();
+renderGrid();
+renderAppGrid(PHOTOS.slice(0,6));
+renderTabs();
+</script>
+</body>
+</html>

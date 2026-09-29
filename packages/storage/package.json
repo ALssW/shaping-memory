@@ -1,0 +1,12 @@
+{
+  "name": "@shaping-memory/storage",
+  "version": "1.0.0",
+  "private": true,
+  "description": "对象存储适配层：本机文件系统与任意 S3 兼容服务（AWS S3 / 阿里云 OSS / MinIO / R2），对外只有 7 个动作",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1141.0"
+  }
+}

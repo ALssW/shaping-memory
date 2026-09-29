@@ -1,0 +1,11 @@
+{
+  "name": "@shaping-memory/sdk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "统一 API 客户端（Web 与 RN 移动端复用），消费 packages/core 的领域类型",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {}
+}

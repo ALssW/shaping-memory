@@ -1,0 +1,12 @@
+{
+  "name": "@shaping-memory/exif",
+  "version": "1.0.0",
+  "private": true,
+  "description": "exiftool 抽取封装：spawn 项目 /tools 下的 exiftool.exe，返回结构化 EXIF",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@shaping-memory/core": "*"
+  }
+}

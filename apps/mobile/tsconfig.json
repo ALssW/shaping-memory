@@ -1,0 +1,15 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "paths": {
+      "@shaping-memory/core": ["../../packages/core/src/index.ts"],
+      "@shaping-memory/design-tokens": ["../../packages/design-tokens/web/tokens.ts"],
+      "@shaping-memory/sdk": ["../../packages/sdk/src/index.ts"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,4933 @@
+/* ==========================================================================
+ * apps/web/src/styles/app.css
+ *
+ * 布局层：只描述「排布」，颜色 / 圆角 / 间距 / 字号 / 层级 / 动效全部取自
+ * packages/design-tokens/web/tokens.css 的变量（由 theme.css 先引入）。
+ * 唯一允许的裸数值是本文件顶部声明的 --tl-line / --list-row-h / --rail-dock-h
+ * 与 EXIF 卡片尺寸（见其注释）。
+ *
+ * 【这些裸数值为什么都乘 --theme-scale】它们是「描述本页几何的像素」而不是设计 token，
+ * 因此 token 体系不会自动带上它们。而后台可配置的字号倍率会放大字号、间距与控件，
+ * 几何量必须同比例跟上，否则文字变大、容器不变 —— 会挤爆或留白。
+ * --theme-scale 只在 PC 被覆盖（见 sdk 的 resolveTheme），窄屏取保底值 1，
+ * 因此下面这些 calc 在手机上算出来就是原值，不需要额外的媒体查询。
+ * ========================================================================== */
+
+/* 进度轨 sticky 停靠高度 = 48px 悬浮页头 + 置顶工具栏高 56px（chip 与切换组同处一行）。
+   它描述的是「本页两段头部的实际高度」，不属于设计 token 体系，
+   与 useProgressRail 的 themeTlLine() 必须保持一致。
+
+   这个数必须是**精确值**，不能给余量：它同时是轨的吸附点与（画廊模块顶部留白收窄后）
+   轨的静态位置 —— 两者相等，轨才会「一动不动」地钉在视口里；
+   差 1px 都会让它在滚动开头先跳一下再钉住。 */
+:root {
+  /* --size-header 本身就带全局倍率（sdk 会按倍率重写它），因此只有 56 这一段自己乘 */
+  --tl-line: calc(var(--size-header) + 56px * var(--theme-scale));
+  /* 列表等高行的目标行高：行内每张卡的宽度 = 本值 × 自身纵横比，
+     因此横片与竖片自动等高。它同样不是设计 token —— 它描述的是
+     「一行照片在多宽的容器里读起来最舒服」，随断点整体缩放（见文件尾部媒体查询）。 */
+  --list-row-h: calc(208px * var(--theme-scale));
+  /* 横轨停靠条（.rail-dock）的净高：读数行 16 + 间隙 6 + 可视窗 60（三层时间轴）+ 上下内边距 16。
+     时间线改为整体平移后不再需要横向滚动条，可视窗因此不必预留滚动条高度。
+     它不是设计 token —— 它只回答「瀑布流底部要让开多少」，因此与 .rail-dock 的
+     height 必须同源：改其中一处就得改另一处，否则最后一行照片会被停靠条压住。 */
+  --rail-dock-h: calc(98px * var(--theme-scale));
+  /* 横向轨中心光带的呼吸周期。它不属于交互动效（150/200/300ms 那三档描述的是
+     「一次交互的反馈时长」），而是一层常驻的环境光，因此单独给一个慢周期。 */
+  --rail-pulse-cycle: 2600ms;
+  /* ------------------------------------------------------------------------
+   * 自定义光标：四态一套 AF 对焦框（取景器对焦点的设计语言）
+   *
+   * 【母版与产物】母版是 packages/design-tokens/cursors/src/*.svg（栅格 128×128，
+   * 热点取几何中心）。这里挂载成 32×32，缩放比恰好 0.25，因此母版里所有坐标
+   * 都取 4 的倍数 —— 每条边都落在整数像素上，导出与挂载都不会有半像素模糊。
+   * 下面四条由 `npm run build:cursors` 从母版生成并逐条比对，手改会被脚本打回。
+   *
+   * 【为什么是双层实心而不是描边】控件一律不画描边是本规范的硬约束。但光标会
+   * 落在纯白照片与近黑背景两种极端上，纯白方框压在白照片上会直接消失。解法是
+   * 在面层下面垫一圈更粗的深色实心矩形，向面层内外各露出 4 单位（32px 下 = 1px）
+   * 当作衬底 —— 轮廓留住了，图形本身一根 stroke 都没有。
+   *
+   * 【为什么只能写实色】SVG data URI 是**独立的一份文档**，它无法获取宿主页面的
+   * CSS 变量（浏览器解析光标图片时不做变量替换），所以只能写死：
+   *   #18181A = color.material.opaque rgba(24,24,26,.92) 的等效实色
+   *   #F5F5F7 = color.text.base（本站的「白」）
+   *   #30D158 = color.success（设计系统里唯一的绿）
+   * 改主色时这四条必须一起改（本规范里唯一允许硬编码颜色的地方）。
+   *
+   * 【热点】四态统一 16 16（= 母版中心），命中点因此永远落在对焦框正中。
+   * ---------------------------------------------------------------------- */
+  /* 正常：白色单点 AF —— 1px 方框 + 内外各 1px 深色衬底。
+     可视包络 11..21px（10px），是原设计 20px 的 50%；面层方框 8px。 */
+  --cursor-default: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 128 128'><path d='M44 44H84V84H44Z M56 56H72V72H56Z' fill='%2318181A' fill-rule='evenodd'/><path d='M48 48H80V80H48Z M52 52H76V76H52Z' fill='%23F5F5F7' fill-rule='evenodd'/></svg>") 16 16, default;
+  /* 悬停可点：同形同位，面层转绿 —— 「对焦框亮起 = 合焦」即「这里可以点」 */
+  --cursor-pointer: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 128 128'><path d='M44 44H84V84H44Z M56 56H72V72H56Z' fill='%2318181A' fill-rule='evenodd'/><path d='M48 48H80V80H48Z M52 52H76V76H52Z' fill='%2330D158' fill-rule='evenodd'/></svg>") 16 16, pointer;
+  /* 按下：微点 AF —— 中心再收一枚小框（4px），读作「焦点收窄、正在落点」。
+     内框外沿 56..72 正好等于衬底的内孔，天生被 1px 深色包着，所以不必再画一层衬底。
+     内:外 = 4px : 8px = 1:2（原 1:3；1:3 在此尺寸下是 2.67px，落不到整数像素上）。 */
+  --cursor-active: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 128 128'><path d='M44 44H84V84H44Z M56 56H72V72H56Z' fill='%2318181A' fill-rule='evenodd'/><path d='M48 48H80V80H48Z M52 52H76V76H52Z' fill='%2330D158' fill-rule='evenodd'/><path d='M56 56H72V72H56Z M60 60H68V68H60Z' fill='%2330D158' fill-rule='evenodd'/></svg>") 16 16, pointer;
+  /* 拖拽：动态区域 AF —— 绿框外环绕 8 枚小点，表示「可动的范围」。
+     排布为正方形（4 角 + 4 边中点），正方形周长因此被 8 等分，间距天然均匀；
+     取 8 而非 12：12 枚落在正方形边上会出现角密边疏，8 等分才是唯一均匀分法。
+     点环半边长 9px，绿芯距方框外沿 4px —— 是原设计 2.25px 的 1.78 倍，拉开才读得出「一片区域」。
+     点与主框同构：r=8 深色圆（4px）垫底 + r=4 绿圆（2px）叠上，露出 1px 深色环。
+     点必须有这圈衬底 —— 否则绿点落在浅色/绿色调照片上会直接消失，而主框却立得住。
+     圆无法与像素网格对齐，点的边缘天生带抗锯齿（主框是矩形，承担零模糊的锚点）。
+     原生 cursor 只能渲染静态位图，所以拖拽反馈全靠这个静态图形，不引入 JS 跟随元素。 */
+  --cursor-drag: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 128 128'><path d='M44 44H84V84H44Z M56 56H72V72H56Z' fill='%2318181A' fill-rule='evenodd'/><path d='M48 48H80V80H48Z M52 52H76V76H52Z' fill='%2330D158' fill-rule='evenodd'/><g fill='%2318181A'><circle cx='28' cy='28' r='8'/><circle cx='64' cy='28' r='8'/><circle cx='100' cy='28' r='8'/><circle cx='100' cy='64' r='8'/><circle cx='100' cy='100' r='8'/><circle cx='64' cy='100' r='8'/><circle cx='28' cy='100' r='8'/><circle cx='28' cy='64' r='8'/></g><g fill='%2330D158'><circle cx='28' cy='28' r='4'/><circle cx='64' cy='28' r='4'/><circle cx='100' cy='28' r='4'/><circle cx='100' cy='64' r='4'/><circle cx='100' cy='100' r='4'/><circle cx='64' cy='100' r='4'/><circle cx='28' cy='100' r='4'/><circle cx='28' cy='64' r='4'/></g></svg>") 16 16, grab;
+}
+
+/* --------------------------------------------------------------------------
+ * 应用外壳
+ * -------------------------------------------------------------------------- */
+.app {
+  min-height: 100vh;
+  /* 这里只能用 clip，不能用 hidden：hidden 会让 overflow-y 被计算为 auto，
+     使 .app 自己变成滚动容器，于是页头与左轨的 position:sticky
+     会绑定到「永不滚动的 .app scrollport」，表现为滚动后整条轨滚出视口消失。
+     clip 同样裁掉横向溢出，但不创建滚动容器，sticky 继续相对视口生效。 */
+  overflow-x: clip;
+}
+
+.module {
+  padding-top: var(--space-64);
+  animation: module-in var(--motion-duration-slow) var(--motion-easing-smooth);
+}
+
+/* --------------------------------------------------------------------------
+ * 页面滚动条：纤细、半透明、主色调
+ * 它是唯一的「页面级」控件，颜色因此走 accent 现算（与玻璃描边、选中态同一套做法），
+ * 分量刻意压到 40% —— 滚动条是导航辅助，不该与照片争注意力。
+ *
+ * 【为什么标准属性与 webkit 伪元素要分开写】Chrome 里 scrollbar-width 一旦不是 auto，
+ * ::-webkit-scrollbar 整组规则会被忽略。因此标准属性留给 Firefox 等，
+ * 支持伪元素的浏览器再显式退回 auto，改用伪元素精确控制宽度与圆角。
+ *
+ * 【查看器打开时怎么「隐藏」】不摘滚动条、也不改 overflow —— 两者都会让视口宽度变化
+ * （实测 15px），页头与左轨会跟着重排，而重排是在查看器的半透明背板底下发生的，
+ * 读起来就是「一开一关，背后闪一下」。改成把滑块画成透明：占位不变、零重排，
+ * 滚动本身由 Viewer 拦掉的滚轮 / 触摸 / 按键输入负责（见其滚动锁）。
+ * -------------------------------------------------------------------------- */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-accent) 40%, transparent) transparent;
+}
+
+@supports selector(::-webkit-scrollbar) {
+  html {
+    /* 退回 auto：否则下面这组伪元素规则会被浏览器整体忽略 */
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+
+  html::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  html::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  html::-webkit-scrollbar-thumb {
+    /* 滑块两端跟着一批照片一起圆：用胶囊圆角，不画描边 */
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  }
+
+  html::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--color-accent) 64%, transparent);
+  }
+
+  html.is-viewer-open::-webkit-scrollbar-thumb,
+  html.is-viewer-open::-webkit-scrollbar-thumb:hover {
+    background: transparent;
+  }
+}
+
+/* 【为什么这条得关在 @supports not 里】在 Chrome 里，元素一旦被设置过 scrollbar-color /
+   scrollbar-width 的非 auto 值，::-webkit-scrollbar 整组规则就会被丢弃 ——
+   于是「藏滚动条」变成「切回系统 15px 宽」，视口宽度跟着变 7px（实测 2552 → 2545），
+   页头与左轨在背板底下重排，看起来就是「一开一关，背后闪一下」。
+   支持伪元素的分支里，隐藏交给上面那条 thumb 透明规则（宽度仍是 8px，零重排）；
+   标准属性这条只留给 Firefox 这类不支持伪元素的浏览器。 */
+@supports not selector(::-webkit-scrollbar) {
+  html.is-viewer-open {
+    scrollbar-color: transparent transparent;
+  }
+}
+
+/* 画廊：这一页比别的模块多一条置顶工具栏，而它要「钉死不动」——
+   sticky 的吸附点是 top: size-header(48)，那就必须让它在文档流里的静态位置也是 48。
+   模块顶部留白因此收窄到 size-header（其余模块仍是 space-64，多出的 16px 是呼吸，
+   这里由工具栏自己的上内边距 space-12 承担）。留白一旦比吸附点小，工具栏就会先被
+   推着走一段再钉住 —— 那正是「浮动元素会跟着滚」的来源。 */
+.module--gallery {
+  padding-top: var(--size-header);
+}
+
+@keyframes module-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.shell {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--space-20) var(--space-16) var(--space-64);
+}
+
+.page-title {
+  font-family: var(--font-family-serif);
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--font-tracking-wide);
+}
+
+.page-sub {
+  font-size: var(--font-size-label);
+  color: var(--color-text-tertiary);
+}
+
+/* 键盘可达性：所有交互元素统一焦点环，颜色用 accent 现算 */
+:where(button, a, input, select):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+ * 顶部悬浮导航（§8.1 fixed + 淡出渐变）
+ * -------------------------------------------------------------------------- */
+.topnav {
+  position: fixed;
+  inset: 0 0 auto 0;
+  /* 【为什么不是 surface.chrome(30)】搜索/账号面板是 .topnav 的子节点，会被父级的层叠上下文
+     封在 30；而画廊工具栏是 sticky 的 inset.chrome(30)，与外壳同级且 DOM 更靠后，
+     于是工具栏压在面板上缘 —— 表现为「右上角关闭按钮点不动、第一行输入框只剩下半截可点」。
+     落在 inset.chrome 之上、surface.modal(50) 之下：面板压过工具栏，打开查看器时仍被模态盖住。 */
+  z-index: calc(var(--z-inset-chrome) + 10);
+  height: var(--size-header);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-12);
+  /* 外壳本身不拦事件，避免遮住下方照片；子元素各自恢复 */
+  pointer-events: none;
+}
+
+.topnav > * {
+  pointer-events: auto;
+}
+
+/* 淡出渐变：给玻璃一个可采样的底色，避免 blur 在没有内容时完全失效 */
+.topnav::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(to bottom, rgba(28, 28, 30, 0.7), rgba(28, 28, 30, 0.22) 70%, transparent);
+  mask-image: linear-gradient(to bottom, #000 40%, transparent);
+  backdrop-filter: blur(var(--blur-md));
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.brand__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--color-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+.brand__name {
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--font-tracking-meta);
+}
+
+.brand__sub {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
+  /* 标语现在是一条完整的句子（不再是「PHOTO ARCHIVE」那种全大写短语），
+     于是从 brand 档宽字距收到 meta 档：0.14em 只适合全大写短语，
+     落在小写句子上会把词与词拉散，读不成一串。 */
+  letter-spacing: var(--font-tracking-meta);
+  white-space: nowrap;
+}
+
+/* 窄屏：标语让位给导航胶囊 —— 导航项是操作入口，标语是气质，先牺牲后者 */
+@media (max-width: 899px) {
+  .brand__sub {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * 胶囊导航（导航项组 / 视图切换 / 排序切换共用同一形态）
+ * 无描边：深度只由「材质 + 模糊 + 阴影」三层叠加表达（规范 §4.4）
+ * -------------------------------------------------------------------------- */
+.pillbar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-context);
+}
+
+.pillbar--neutral {
+  box-shadow: var(--elevation-neutral);
+}
+
+.pillbar__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 28px;
+  padding: 0 var(--space-12);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  transition: background var(--motion-duration-base), color var(--motion-duration-base);
+  white-space: nowrap;
+}
+
+.pillbar__item:hover {
+  color: var(--color-text-base);
+}
+
+/* 激活态：实心 accent + 背景色文字（唯一允许「填充 accent」的两种场合之一） */
+.pillbar__item.is-on {
+  background: var(--color-accent);
+  color: var(--color-background);
+  font-weight: var(--font-weight-semibold);
+}
+
+.pillbar__item:disabled {
+  cursor: not-allowed;
+}
+
+.pillbar__icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* --------------------------------------------------------------------------
+ * 圆形图标按钮（§4.2）：只有 default(32) / compact(28) 两档，不得自创第三档。
+ * 容器尺寸 size.icon-button.* 与字形尺寸 size.icon.* 成对取值。
+ * -------------------------------------------------------------------------- */
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: var(--size-icon-button-default);
+  height: var(--size-icon-button-default);
+  border-radius: var(--radius-full);
+  color: var(--color-text-base);
+  transition: background var(--motion-duration-base), color var(--motion-duration-base);
+}
+
+.icon-btn svg {
+  width: var(--size-icon-default);
+  height: var(--size-icon-default);
+}
+
+.icon-btn:hover {
+  background: var(--color-fill-base);
+}
+
+.icon-btn--compact {
+  width: var(--size-icon-button-compact);
+  height: var(--size-icon-button-compact);
+}
+
+.icon-btn--compact svg {
+  width: var(--size-icon-compact);
+  height: var(--size-icon-compact);
+}
+
+/* 激活态：accent 文字 + 12% 淡洗底，不填充实心 accent */
+.icon-btn.is-on {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+}
+
+/* 中性玻璃面按钮：压在照片上时用。无描边，只靠材质 + 模糊 + 中性阴影分层 */
+.icon-btn--glass {
+  background: var(--color-material-ultra-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-neutral);
+}
+
+/* --------------------------------------------------------------------------
+ * 画廊置顶工具栏：分类 chip + 墙面/列表切换 + 倒序/正序（sticky 在悬浮导航下方）
+ * chip 与两个切换组直接平铺在这一行里，没有中间包裹容器 —— 控件各自贴着页面，
+ * 少一层容器就少一次「这个盒子到底管什么」的追问。
+ * -------------------------------------------------------------------------- */
+.gallery-toolbar {
+  position: sticky;
+  top: var(--size-header);
+  /* 工具栏必须压在悬浮卡片之上：分类 chip 与两个切换组是**操作入口**，
+     卡片只是内容。两者此前同为 inset.badge（20），而工具栏在 DOM 里更靠前，
+     于是抬起的卡片会盖住 chip 与胶囊 —— 提到 inset.chrome（30）后，
+     悬浮卡片（20）低于工具栏、高于静止卡片（auto），层级关系不再靠运气。 */
+  z-index: var(--z-inset-chrome);
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  /* 左右留出与左轨一致的 16px：分类 chip 不再有包裹容器，
+     若不留白就会紧贴视口边缘，看起来像少了一格内边距。 */
+  padding: var(--space-12) var(--space-16) var(--space-8);
+}
+
+/* 排列方式那一组靠右：分类在左、排列与排序在右，读起来是「筛什么 → 怎么看」 */
+.gallery-toolbar__view {
+  margin-left: auto;
+}
+
+.chip {
+  height: var(--size-chip);
+  padding: 0 var(--space-12);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  background: var(--color-material-ultra-thin);
+  transition: background var(--motion-duration-base), color var(--motion-duration-base);
+}
+
+.chip:hover {
+  color: var(--color-text-base);
+  background: var(--color-material-thin);
+}
+
+/* 激活态：accent 淡洗底 + accent 文字。无描边，只靠底色与字色区分 */
+.chip.is-on {
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* --------------------------------------------------------------------------
+ * 带左轨的栅格排布：墙面与列表共用
+ * 三栏 = 两条车道的刻度标签 + 轨道 / 命中后月份标签的留白 / 内容。
+ * -------------------------------------------------------------------------- */
+.rail-layout {
+  display: grid;
+  /* 第 1 栏 = 轨道 + 它左侧的两条标签车道：年份在最外侧、月份贴着轨道。
+     年份比月份宽一档（15px vs 11px 字号），两车道之间还要留出空隙，因此实测需要
+     space-64 的年份车道 + space-16 的空隙 + 轨道本身。
+     第 2 栏是轨道右侧的留白：**只有月份标签**会从轨道中心向右伸出（「12月」约 18px），
+     给它 space-32 就够，同时把内容区推离轨道，读起来不挤。
+     年份标签不再换边，因此这一栏不必再按四位数字的宽度（约 38px）预留。
+     这一栏是「故意空着」的，所以其余子项必须写死 grid-column（见规范 §6.5）。 */
+  grid-template-columns:
+    calc(var(--space-64) + var(--space-16) + var(--size-timeline-track))
+    var(--space-32)
+    minmax(0, 1fr);
+  column-gap: var(--space-8);
+  align-items: start;
+}
+
+/* --------------------------------------------------------------------------
+ * 墙面视图：按时间分段的 N 列瀑布流 + 渐进显图
+ * 列间距与卡片下边距压到 space-4（栅格上最小的一档）：整面墙读起来是一整片
+ * 「印样」，相邻照片只留一条发丝缝来分界。
+ *
+ * 【为什么是「先分段、段内 N 个纵向列」而不是 CSS multi-column 或纯轮转列】
+ * 一、multi-column 是**列优先**填充：它会把最新的一段整段写入第一列，于是同一行里
+ *     从左往右读，时间反而是跳着走的。
+ * 二、纯轮转列（第 i 张进第 i % N 列）虽然横读即时间序，但各列的刻度边界位置天生
+ *     不同步，分隔线只能退化成「每列一条短线」，画不成列表那样横贯整行的一根线。
+ * 因此改为「先按刻度分段 → 每段一条整行分隔线 + 段内轮转分列」：
+ * 段内横向紧邻即时间紧邻（先从左往右、再往下），段与段之间由那根整行线切开。
+ * 列数由 JS 给到 --masonry-cols：分配方式要在 JS 里做，列数就必须与它同源，
+ * 否则「每张进入哪一列」和「有几列」会不一致。断点与改造前的媒体查询完全一致。
+ * -------------------------------------------------------------------------- */
+.wall {
+  /* 【满幅为什么不留装裱边】墙面被定为「一整片印样」：照片从屏幕最左列铺到最右列，
+     不再给自己留一圈内边距。读数的可读性交给浮层自己的纱幕（见下），
+     而不是靠给整面墙让位。 */
+  padding: 0;
+}
+
+/* 瀑布流落在第 3 栏；min-width 必须归零，否则列数会把网格栏撑宽 */
+.wall > .masonry {
+  grid-column: 3;
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------------------
+ * 浮层变体（墙面）：rail 不占一栏，而是浮在页面正下方
+ * 单栏栅格 + 瀑布流独占那一格 = 照片真的从屏幕最左列铺到最右列。
+ * 横轨本身是 fixed 定位（见 .rail-dock），彻底脱离栅格流 ——
+ * 因此它既不切掉最左一列的画面，也不会把照片顶走。
+ * -------------------------------------------------------------------------- */
+.rail-layout--float {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* 瀑布流必须与浮层显式同格：单栏栅格里只写 grid-column 会被自动放置算法
+   判为「(1,1) 已占用」而挪到第 2 行 —— 整面照片墙因此被顶到首屏以下。 */
+.rail-layout--float > .masonry {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+/* --------------------------------------------------------------------------
+ * 横轨的停靠位：页面正下方、水平居中
+ * left 50% + translateX(-50%) 是「任何屏宽下都居中」的最短路径 ——
+ * 不必知道自身宽度，也不必随屏宽改写任何数值（fixed 的包含块是视口，
+ * 从 .app 到 .rail-dock 的祖先链上没有任何 transform / filter）。
+ * 宽度取 min(定值, 视口 - 两侧留白)：宽屏下不横贯整页，窄屏下自动收进安全区。
+ * 定值从 720 提到 1040：横向版的时间线在这个宽度里读起来最舒展（月尺度「9月」/ 日尺度「9/6」）。
+ * 它同时是可视窗的宽度 —— 舞台用它当「视野半宽」的尺子（见 .progress-rail__stage 的 50cqw）。
+ * 材质与层级跟页头同档：它压在照片上，必须自带底才读得清。
+ * -------------------------------------------------------------------------- */
+.rail-dock {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-24);
+  transform: translateX(-50%);
+  z-index: var(--z-inset-chrome);
+  width: min(1040px, calc(100vw - var(--space-24) * 2));
+  height: var(--rail-dock-h);
+  /* 上下内边距之和 + 内容高（见 :root 的 --rail-dock-h）必须等于本高度 */
+  padding: var(--space-8) var(--space-16);
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-lg);
+}
+
+/* 瀑布流本体 = 一串时间分段自上而下码放（每段 = 一条整行分隔线 + 一个 N 列网格）。
+   分段之间由这里的 gap 给出呼吸，段内的纵向节奏仍交给卡片自己的下边距。
+   gap 取 space-24 而不是列表那档的 space-40：墙面被定为「一整片印样」，
+   分段只是切段、不是分页，线与照片之间不该空出一大片。 */
+.masonry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+  /* 底部让开停靠条：横轨浮在页面正下方，最后一行照片若不让位就会被它压住 */
+  padding: var(--space-8) 0 calc(var(--rail-dock-h) + var(--space-64));
+}
+
+/* 日尺度（masonry--fine）：分段单位从「月」降到「日」，段数会翻好几倍 ——
+   段间距与线头留白同步收紧，否则一屏里几乎全是空白。
+   分隔线与标题本身不动：换的是「切多细」，不是「段长什么样」。 */
+.masonry--fine {
+  gap: var(--space-16);
+}
+
+/* 一个时间分段：上面一条整行分隔线、下面一个 N 列网格。
+   gap 与列表 .list__group 同档（space-12）：线与照片的呼吸两视图一致。 */
+.masonry__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  min-width: 0;
+}
+
+/* 段内的列网格（原来的 .masonry 本体）：列数与列间距都归它。
+   保底 2 列 —— JS 只在挂载后才有视口宽度，首帧不能塌成一列。
+   align-items: start 让每条纵带按自身内容收尾，不被拉成等高（拉平只会在
+   短列的卡片下方凭空多出一块空白）。 */
+.masonry__grid {
+  display: grid;
+  grid-template-columns: repeat(var(--masonry-cols, 2), minmax(0, 1fr));
+  column-gap: var(--space-4);
+  align-items: start;
+}
+
+/* 一列就是一条纵带：卡片自上而下码放，纵向节奏仍由卡片自己的下边距给出
+   （不用 gap，免得与 .photo-card 的 margin-bottom 叠加成两倍）。 */
+.masonry__col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* 时间分隔线（跨月 / 跨日）：一根横贯**整行**的发丝线，属于整个分段、不属于某一列。
+   分段结构（见 WallView）保证了所有列共用同一条边界，线因此是直的、不断开的；
+   旧画法每列各拉一条短线，各列边界不同步，读起来是「好几条错开的线」。
+
+   【为什么与列表分组头一字不差同款】它与列表那条分割线回答的是同一个问题
+   （「这里换了一段」），因此排版必须同源：线在上、标题紧贴线下方左对齐。
+   更早的画法是「标签压在线上、用底色咬断线身」—— 那是另一套语汇，
+   两视图切换时会读成两种东西，所以整条换掉，不是微调。 */
+.masonry__time-sep {
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--color-border-base);
+  /* 标题与张数同行：两者是同一句话的两半（「哪一段 / 有几张」），
+     基线对齐让字号差自然体现层级，张数不必另起一行或另占一端。 */
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+}
+
+.masonry--fine .masonry__time-sep {
+  padding-top: var(--space-8);
+}
+
+/* 分隔标签：与列表分组标题同字号、同字重、同主色调 */
+.masonry__time-sep-label {
+  display: block;
+  color: var(--color-accent);
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--font-tracking-normal);
+  white-space: nowrap;
+}
+
+/* 段内张数：压小一号、去色到 tertiary，读起来是标题的注解而非并列信息。
+   mono 与「数值类」保持一致（时间、分辨率、曝光参数同族），
+   与列表 .list__group-count 一字不差 —— 两视图回答的是同一个问题。 */
+.masonry__time-sep-count {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--font-tracking-meta);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+/* 照片与它所属分段的共同外壳（.masonry__col 里的一格）。
+   【为什么要多这一层】切刻度时分段要重切，这张照片常常搬进另一段（外层网格都换了），
+   补间必须落在一个**会持续存在**的元素上：重排动画挂在它身上，
+   PhotoTile 的根节点已经被指针附着 / 聚拢 / 抬起三条 MotionValue 占满，
+   再叠一层布局动画会互相覆盖。它用 layoutId 认回归属（见 WallView）。
+   对排版是透明的：无内边距无边框，卡片的下边距照旧给出那条发丝缝，
+   因此这里不需要 display: flex —— 多设一层只会让间距的来源变得不可见。 */
+.masonry__item {
+  min-width: 0;
+}
+
+.photo-card {
+  margin-bottom: var(--space-4);
+  position: relative;
+  /* 不带圆角：照片就是照片，切边比「卡片」更像印样。悬浮态也不再收角，
+     于是「离开墙面」这件事完全交给 Motion 的抬起与放大去表达。 */
+  cursor: var(--cursor-pointer);
+  /* 逐帧被 Motion 变换的就是这张卡片，合成层提示因此挂在它身上。
+     此前挂在已被删掉的内层缩放层上：父级每帧变换会让那个独立图层反复重新光栅化，
+     未就绪时整块呈现为白色 —— 悬浮跟随鼠标时看到的「边框闪白」就是这么来的。
+     这里也不再 overflow:hidden：图片本体的裁切由 .progressive 负责，
+     卡片上的裁剪对没有圆角的照片毫无作用，却会让合成层每帧重算裁切矩形。 */
+  will-change: transform;
+  /* 位移 / 缩放 / 聚拢全部由 Motion 驱动（见 lib/motion.ts），
+     这里只过渡「绘制类」属性——阴影：它不进合成层、也不需要逐帧插值，
+     而且阴影里的 color-mix() 与 accent 变量 Motion 无法插值。 */
+  transition: box-shadow var(--motion-duration-base) var(--motion-easing-smooth);
+}
+
+/* 悬浮：投出 accent 着色阴影，做出「照片离开墙面浮起」的观感。
+   抬起与放大由 Motion 负责（照片随卡片同比放大，不再有内层反向缩放）；
+   z-index 让抬起的卡片盖住聚拢过来的邻位，但仍低于置顶工具栏的 chip 与切换胶囊。 */
+.photo-card:hover,
+.photo-card:focus-within {
+  box-shadow: var(--elevation-context);
+  z-index: var(--z-inset-badge);
+}
+
+/* 蒙版层：徽章与文字遮罩的共用外壳。 */
+.photo-card__overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* 占位框：纵横比由 ProgressiveImage 内联给出，图片未到之前先把高度占住 */
+.progressive {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.progressive__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* 渐进显图：加载完成后由 opacity 过渡带出（§6.3） */
+  opacity: 0;
+  transition: opacity 600ms ease;
+}
+
+.progressive__img.is-loaded {
+  opacity: 1;
+}
+
+.badge {
+  height: 22px;
+  max-width: 100%;
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  /* 压在照片上：底色不可知，用最厚材质 + 模糊保可读性，不画描边 */
+  background: var(--color-material-ultra-thick);
+  backdrop-filter: blur(var(--blur-md));
+}
+
+/* 实况角标：常驻照片右上角（不随 hover 蒙版出现/消失）。
+   与 .badge 共用「厚材质 + 模糊」的语言，只是文字固定为「实况」。 */
+.photo-card__live {
+  position: absolute;
+  right: var(--space-8);
+  top: var(--space-8);
+  z-index: var(--z-inset-badge);
+  height: 22px;
+  padding: 0 var(--space-8) 0 var(--space-6);
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  background: var(--color-material-ultra-thick);
+  backdrop-filter: blur(var(--blur-md));
+  /* 纯指示物：点它等于点卡片，不单独承接交互 */
+  pointer-events: none;
+}
+
+.photo-card__live svg {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  color: var(--color-accent);
+}
+
+.photo-card__live-text {
+  white-space: nowrap;
+}
+
+/* 悬浮蒙版：底部压深以承载文字。
+   用材质渐隐（不是实色块），所以不需要配 blur —— 照片本身要保持清晰。
+   渐变只覆盖下 1/3：上 2/3 完全透明，照片主体不被压暗，留出「照片是唯一光源」。 */
+.photo-card__mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--space-6);
+  padding: var(--space-16) var(--space-12) var(--space-12);
+  background: linear-gradient(
+    to top,
+    var(--color-material-opaque) 0%,
+    var(--color-material-ultra-thick) 16%,
+    transparent 34%
+  );
+  z-index: var(--z-inset-decoration);
+}
+
+.photo-card__title {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* 器材行：相机型号在左，格式胶囊在右 —— 顺序固定为「机身 → 容器」 */
+.photo-card__gear {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+
+.photo-card__cam {
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--font-tracking-wide);
+}
+
+.photo-card__format {
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--font-tracking-meta);
+}
+
+/* 曝光参数：底行左侧，与右侧标签共用一条基线。
+   它读的是数值，与标签不是一类信息，靠 mono 字体与标签区分；
+   独占行并居中会让蒙版多一个视觉中心，时间才是这里更该被先读到的一段。 */
+.photo-card__exposure {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+
+/* 底行：曝光参数在左、标签在右，两者共用一条基线 */
+.photo-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+/* 拍摄时间 / 分辨率共处一行：两者一律居左依次排布（时间 → 分辨率），
+   与上方的标题 / 器材行、下方的曝光行共用同一条左基准线 ——
+   整块蒙版读下来是一条对齐的左列，分辨率不再被推到卡片右缘。
+   （地点已经抽出到照片右上角，不再参与这一行，见 .photo-card__place。）
+   时间独占时行高不变（mono caption）。 */
+.photo-card__daterow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+/* 拍摄地点：墙面上挪到照片**右上角**，一枚自带玻璃底的独立胶囊。
+   【为什么自带底】蒙版顶部 2/3 是完全透明的（照片主体不被压暗），
+   悬空的文字压在照片上读不清 —— 于是给它一枚与实况角标同款的厚材质底。
+   【为什么绝对定位】它是「在哪儿拍的」这一条独立信息，钉在角落比挤在
+   时间左侧更醒目；同时把它抽走，daterow 里只剩时间与分辨率，两者才能稳稳左对齐。
+   定位参照是 .photo-card__mask（inset:0），所以 right/top 就是照片的边角。
+   max-width + 文本省略是为长地名（「广东省深圳市南山区」及以上）准备的：
+   它不能横穿整张照片，宁可截断。 */
+.photo-card__place {
+  position: absolute;
+  top: var(--space-12);
+  right: var(--space-12);
+  z-index: var(--z-inset-badge);
+  max-width: 60%;
+  height: 22px;
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-accent);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--font-tracking-meta);
+  background: var(--color-material-ultra-thick);
+  backdrop-filter: blur(var(--blur-md));
+}
+
+/* 既是实况照片、又有拍摄地点时，右上角已被实况角标占着 ——
+   地点胶囊顺着呼吸位往下让开一格，两枚同款玻璃胶囊不会叠成一团
+   （角标是常驻的，不能在 hover 时才想起它；它在 DOM 里是 overlay 的前一个兄弟）。 */
+.photo-card__live ~ .photo-card__overlay .photo-card__place {
+  top: calc(var(--space-8) + 22px + var(--space-6));
+}
+
+.photo-card__place svg {
+  width: 11px;
+  height: 11px;
+  flex: none;
+}
+
+.photo-card__place-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photo-card__date {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--font-tracking-meta);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* 分辨率：与曝光参数同为「数值类」，沿用 mono + caption + secondary 的口径 */
+.photo-card__resolution {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--font-tracking-meta);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.photo-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.photo-card__tag {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
+}
+
+.empty-state {
+  padding: var(--space-64) 0;
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-body);
+}
+
+/* 分页哨兵 + 底部状态条：平时只有一小段余量（给 IntersectionObserver 一个可交会的实体），
+   有状态时才长出一行字。居中对齐，与上面的空态保持同一视觉基调。 */
+.load-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12);
+  min-height: var(--space-64);
+  padding: var(--space-16) 0 var(--space-32);
+}
+
+.load-more__text {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-body);
+}
+
+.load-more__text--error {
+  color: var(--color-danger);
+}
+
+/* --------------------------------------------------------------------------
+ * 进度轨：刻度标签（左右换边）+ 可拖动的轨道 + 生长中的填充 + 滑块
+ * 墙面与列表两个视图共用同一条轨，只有**朝向**不同（见 .progress-rail--horizontal）。
+ *
+ * 【两条车道】纵向轨的左侧分成内外两条：大单位（月尺度=年份、日尺度=月初）在最外侧、
+ * 小单位（月 / 日）贴着轨道，互不越界。
+ * 为什么必须分道：实测密集处相邻月份刻度的间距只有 14.9px（轨高 775px / 44 枚刻度），
+ * 若大单位与小单位同处一条车道，大单位只要比它锚定的那枚小单位高半个行高，就正好压在
+ * 上一枚标签上（两者 y 只差 1px）。
+ * -------------------------------------------------------------------------- */
+.progress-rail {
+  /* sticky / 网格栏位 / z-index 全部归外层的 .rail-slot 或 .rail-dock ——
+     定位职责混在一起就会互相覆盖。本层只负责「轨道与标签怎么摆」，
+     因此只需要一个定位上下文（绝对定位的浮标层靠它）。 */
+  position: relative;
+  height: 100%;
+  display: flex;
+  /* 轨道贴在第 1 栏的右端：左边空出来的那一段留给两条标签车道 */
+  justify-content: flex-end;
+  /* 换边的水平偏移 = 半个轨宽 + 与轨的间隙。
+     抽成一个变量，命中与未命中的 transform 才都只有两项（百分比 + 这一项），
+     浏览器只能对同形状的 calc 做逐项插值 —— 形状一致，换边才会平滑。 */
+  --month-shift: calc(var(--size-timeline-track) / 2 + var(--space-6));
+  /* 大单位的额外让位：把大单位车道推到小单位车道之外，两条车道之间留出空隙 */
+  --year-gutter: var(--space-32);
+}
+
+/* --------------------------------------------------------------------------
+ * 轨道槽：纵向轨的网格栏位 + sticky 定位 + 层级（只有列表视图用它）
+ * -------------------------------------------------------------------------- */
+.rail-slot {
+  grid-column: 1;
+  position: sticky;
+  top: var(--tl-line);
+  align-self: start;
+  height: calc(100vh - var(--tl-line) - var(--space-20));
+  min-width: 0;
+  /* z-index 必须显式给值：右侧内容带 backdrop-filter，
+     会自建层叠上下文并与本轨同处「定位元素」这一层，DOM 靠后的它会盖住轨上的标签。 */
+  z-index: var(--z-inset-chrome);
+}
+
+.progress-rail__track {
+  position: relative;
+  width: var(--size-timeline-track);
+  height: 100%;
+  cursor: var(--cursor-drag);
+  touch-action: none;
+}
+
+.progress-rail__track::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-text-quaternary) 24%, transparent);
+  transition: background var(--motion-duration-base);
+}
+
+.progress-rail__track:hover::before {
+  background: color-mix(in srgb, var(--color-accent) 34%, transparent);
+}
+
+.progress-rail.is-dragging .progress-rail__track {
+  cursor: var(--cursor-drag);
+}
+
+/* 轨上时间刻度：一整份档案的时间分布就画在这里 —— 时间单位变化处一枚短横线，
+   大单位起点更长，当前读数那一枚高亮 accent。
+   不接事件（pointer-events: none），轨道的拖拽命中区必须保持完整。 */
+.progress-rail__mark {
+  position: absolute;
+  left: 50%;
+  width: 7px;
+  height: 2px;
+  margin: -1px 0 0 -3.5px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--color-text-quaternary) 38%, transparent);
+  pointer-events: none;
+  transition: background var(--motion-duration-base), width var(--motion-duration-base);
+}
+
+.progress-rail__mark.is-major {
+  width: 13px;
+  margin-left: -6.5px;
+  background: color-mix(in srgb, var(--color-text-quaternary) 62%, transparent);
+}
+
+.progress-rail__mark.is-on {
+  background: var(--color-accent);
+}
+
+/* --------------------------------------------------------------------------
+ * 浮标层：大单位与小单位的刻度标签
+ * 与轨道等高（inset: 0），因此三者用同一个 top 百分比就落在同一条水平线上。
+ * 本层不接事件（pointer-events: none），只有标签本身接 —— 轨道以外的空白不该挡住任何东西，
+ * 而轨道的拖拽命中区在下一层的 __track 上保持完整。
+ * -------------------------------------------------------------------------- */
+.progress-rail__floaters {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* 刻度标签共用的落点规则：
+   - 平时停在 --mark-ratio（自己那枚刻度处）
+   - 只有**小单位**命中后改停 --rail-progress（滚动点），于是它一路贴着滑块走
+   纵向必须给 transition，否则命中瞬间会瞬移；换边是横向的 transform，用更慢的一档
+   （slow + 对称 ease-in-out），因为那是一次「起止都要停下来」的位移。
+   纵向用 fast 档与滑块同拍：两处若是不同时长，滚动时标签会明显落在滑块后面。
+
+   顶部安全边（space-32）：轨道起点紧贴置顶工具栏（stuck 时轨道顶在 105px，
+   而上方分类 chip 一直占到约 107px），两端的刻度标签因此会伸进 chip 那一行。
+   于是给纵向落点加一个下限：标签中心不允许高过「轨道顶 + space-32」。
+   这个值 = 小单位半行字高(8) + 大单位上抬量(16) + 余量(8)，取的是两条车道里要求最高的那条 ——
+   两条车道共用同一条下限，大单位的上抬才继续表现为「中心高 16px」而不是被顶成同一行。
+   小单位命中态同样受这条保护：进度落到最顶端时标签会略微滞后于滑块，
+   这是刻意换取「绝不与工具栏冲突」，越出这个窄带后两者严丝合缝。 */
+.progress-rail__minor,
+.progress-rail__major {
+  position: absolute;
+  left: calc(100% - var(--size-timeline-track) / 2);
+  top: clamp(var(--space-32), calc(var(--mark-ratio) * 100%), 100%);
+  padding: 0;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: var(--cursor-pointer);
+}
+
+/* 只有小单位跟着滚动点走：它是「当前读到哪一段」的读数 */
+.progress-rail__minor.is-on {
+  top: clamp(var(--space-32), calc(var(--rail-progress) * 100%), 100%);
+}
+
+/* 小单位刻度标签：贴轨车道。平时停在轨道左侧，命中时滑到右侧并点亮 accent。
+   水平位置用「自身宽度 + 半个轨宽 + 间隙」表达，不依赖具体字号：
+   translate 的百分比作用于自身宽度，所以左右两侧都刚好贴住轨道边缘。 */
+.progress-rail__minor {
+  transform: translate(calc(-50% - var(--month-shift)), -50%);
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--font-tracking-meta);
+  color: var(--color-text-quaternary);
+  /* 换边的横移比纵向落点慢一档：它是一次「起止都要停下来」的往复位移 */
+  transition: transform var(--motion-duration-slow) var(--motion-easing-in-out),
+    top var(--motion-duration-fast) var(--motion-easing-in-out), color var(--motion-duration-base),
+    opacity var(--motion-duration-base);
+}
+
+.progress-rail__minor:hover {
+  color: var(--color-text-secondary);
+}
+
+.progress-rail__minor.is-on {
+  transform: translate(calc(50% + var(--month-shift)), -50%);
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* 抽稀：日尺度下刻度可以多达数百枚，标签若全部点亮会糊成一片。
+   被抽稀的标签**仍然渲染**、只是收成透明 —— 它还要参与「滑到右侧」的位移过渡，
+   直接从 DOM 里摘掉会让相邻标签在切换瞬间跳位。
+   当前读数那一枚永远可见（见 ProgressRail 的 muted 判定）。 */
+.progress-rail__minor.is-muted {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 大单位刻度标签：**钉死在外侧车道**，锚在每个大单位的首枚刻度处，并上抬半个行高 ——
+   与它斜下方（小单位车道上）的那枚标签构成「2026 / 8月」一组，大单位的起点清晰可见。
+   它既不换边、也不跟滚动点走：大单位是这条轨的「章节」，
+   位置恒定才能当路标读；「当前读到的是哪一章」只由颜色回答。
+   （因此本规则里没有 transform 过渡 —— 位置恒定就不该有位移过渡。） */
+.progress-rail__major {
+  transform: translate(calc(-50% - var(--month-shift) - var(--year-gutter)), calc(-50% - var(--space-16)));
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--font-tracking-meta);
+  color: var(--color-text-tertiary);
+  transition: color var(--motion-duration-base);
+}
+
+.progress-rail__major:hover {
+  color: var(--color-text-secondary);
+}
+
+/* 命中该大单位：位置一动不动，只有颜色从 tertiary 提到 accent */
+.progress-rail__major.is-on {
+  color: var(--color-accent);
+}
+
+/* 已走过的部分：贴着轨道底端向上生长，顶端正好停在滑块上 —— 高度由 Motion 驱动
+   （见 ProgressRail），因此这里不给 transition，否则会与 Motion 的插值冲突。 */
+.progress-rail__fill {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to top,
+    var(--color-accent),
+    color-mix(in srgb, var(--color-accent) 45%, transparent)
+  );
+}
+
+.progress-rail__thumb {
+  position: absolute;
+  left: 50%;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 26%, transparent);
+}
+
+/* 拖动中：滑块光晕放大，优先保证跟手性 */
+.progress-rail.is-dragging .progress-rail__thumb {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+ * 横向变体（墙面）：整条轨躺平 —— 读数在最上，其下是一条「内车道数字 / 刻度轨 / 大单位」
+ * 三层叠放的时间轴。朝向只改「轴」：纵向的 top 换成横向的 left、纵向的 height 换成横向的 width。
+ * 进度语义完全不变：比例 0 恒为最新，于是**时间从左到右 = 最新到最旧**。
+ *
+ * 【时间线移动，而不是滚动点移动】横向版不把刻度钉在固定的一段轨道上，而是把整条
+ * 时间线当作一张长卷，由进度驱动整体向左平移（见 .progress-rail__stage 的 transform）：
+ * 进度 0 时最新一刻居中、进度 1 时最旧一刻居中，滑动点（滑块与读数）因此**恒定在正中**。
+ * 这与纵向版是两种表达：纵向是「固定尺子 + 移动游标」，横向是「固定游标 + 移动尺子」——
+ * 后者才是「时间在向前推进」的视觉隐喻。
+ *
+ * 【为什么还要 stage 与 viewport 两层】时间线总长按内容算（密集处要摆得下全部刻度数字），
+ * 可以比停靠条宽；超出视野的部分必须裁掉（否则刻度数字会飘到照片上），
+ * 因此由 viewport 负责裁切、stage 负责承载长度与平移。
+ * -------------------------------------------------------------------------- */
+.progress-rail--horizontal {
+  /* 中心光晕（.progress-rail__focus）的定位上下文 */
+  position: relative;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  width: 100%;
+  /* 两行（读数 16 / 可视窗 60）+ 一道间隙 6 = 82 = --rail-dock-h 减上下内边距 */
+  gap: var(--space-6);
+  /* 拖拽命中区是这一整层（见 useProgressRail 的文件头），因此光标与「不选中文字」
+     也提到这一层：拖时间线时读数与刻度数字不该被划蓝（-webkit- 前缀给 Safari）。
+     纵向版不动它 —— 那里命中区仍是那条细轨道，文字防选交给拖拽期间的 body 级禁选。 */
+  cursor: var(--cursor-drag);
+  user-select: none;
+  -webkit-user-select: none;
+  /* 横向手势留给拖动、竖向仍交给页面滚动：触屏在轨上竖划照样能翻页，
+     横划不会被浏览器当成别的动作抢走。内侧轨道的 touch-action: none 不冲突
+     （触控动作取命中元素与祖先的交集，落到轨道上时本就以它为准）。 */
+  touch-action: pan-y;
+}
+
+/* 横轨的读数：居中一行，压在时间轴上方。纵向没有这一层 ——
+   那里「当前读到哪一段」由小单位标签自己滑到轨道右侧承担。 */
+.progress-rail__readout {
+  margin: 0;
+  line-height: var(--space-16);
+  text-align: center;
+  /* 读数文字宽度会变（「2026 · 8月」↔「2026 · 8月6日」），不换行才不会带动下面那条轨重排，
+     切尺度时因此零位移、零闪烁 */
+  white-space: nowrap;
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--font-tracking-meta);
+  color: var(--color-text-secondary);
+}
+
+/* 可视窗：只负责裁切。时间线整体平移后，超出停靠条两端的刻度由它裁掉 ——
+   否则那些数字会飘到照片上去。这里不再横向滚动：能看到的范围由平移决定，
+   而进度 1 时最旧一刻会移到正中，因此没有刻度会被永远藏在视野外。
+   container-type 让它同时成为 stage 里 50cqw 的那把尺子（见 .progress-rail__stage）。 */
+.progress-rail__viewport {
+  container-type: inline-size;
+  height: calc(var(--space-16) * 3 + var(--space-6) * 2);
+  overflow: hidden;
+}
+
+/* 舞台：三层时间轴的定位上下文，也是「时间线有多长」的载体。
+   min-width 取「可视窗宽度」与「落点整形算出的所需跨度」里的较大者 ——
+   摆得下就与停靠条同宽，摆不下就按内容加长（见 useGalleryRail 的 densifyMarks）。
+   两端各留半枚标签的宽度（--rail-end-pad）：比例 0 / 1 的标签是 translate(-50%) 居中的，
+   不留这段余量就会被可视窗的 overflow 裁掉一半。
+
+   【平移公式】translateX = 视野半宽 − 端让位 − 进度 × 可移距离
+   - 50cqw = 可视窗宽度的一半（viewport 是 inline-size 容器）
+   - 100% 在 translateX 里是**舞台自身宽度**，减去两端让位后正是「最新到最旧」的距离
+   于是进度 0 时 x = endPad 处的最新一刻落在正中，进度 1 时最旧一刻也落在正中。
+   短过渡用来吸收滚轮「一格一格」的跳变；拖拽时移除（见下面的 is-dragging）。 */
+.progress-rail__stage {
+  --rail-end-pad: var(--space-24);
+  position: relative;
+  min-width: max(100%, var(--rail-min-span));
+  /* 三层（内车道 16 + 间隙 6 + 轨 16 + 间隙 6 + 大单位 16）= 60 */
+  height: calc(var(--space-16) * 3 + var(--space-6) * 2);
+  transform: translateX(
+    calc(50cqw - var(--rail-end-pad) - var(--rail-progress) * (100% - 2 * var(--rail-end-pad)))
+  );
+  transition: transform var(--motion-duration-fast) var(--motion-easing-smooth);
+  will-change: transform;
+}
+
+/* 拖拽中移掉平移过渡：优先保证跟手性，与滑块/填充的 INSTANT 是同一条原则 */
+.progress-rail--horizontal.is-dragging .progress-rail__stage {
+  transition: none;
+}
+
+/* 轨道落在三层的正中：内车道数字在上、大单位在下（与纵向的「内 / 外车道」一一对应）。
+   左右各让开 --rail-end-pad，与浮标层同宽同起点，同一个比例坐标才落在同一条竖线上。 */
+.progress-rail--horizontal .progress-rail__track {
+  position: absolute;
+  left: var(--rail-end-pad);
+  right: var(--rail-end-pad);
+  top: calc(var(--space-16) + var(--space-6));
+  width: auto;
+  height: var(--size-timeline-track);
+}
+
+/* 轨的基线由「竖线」改成「横线」 */
+.progress-rail--horizontal .progress-rail__track::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  bottom: auto;
+  width: auto;
+  height: 2px;
+  margin: -1px 0 0;
+}
+
+/* 刻度短横线：纵向时是横线（宽 7 高 2），横向时转 90° 成竖线 */
+.progress-rail--horizontal .progress-rail__mark {
+  left: auto;
+  top: 50%;
+  width: 2px;
+  height: 7px;
+  margin: -3.5px 0 0 -1px;
+}
+
+.progress-rail--horizontal .progress-rail__mark.is-major {
+  height: 13px;
+  margin-top: -6.5px;
+}
+
+/* 横向没有「从起点长到滑块」的填充：滑动点恒定在正中，已读部分不再是一条进度条，
+   改由滑条周围一小段光带来表达（见下面的 .progress-rail__focus）。 */
+
+/* 滑块固定在正中：它就是「现在」，不随滚动移动 —— 移动的是时间线本身。
+   位置由 CSS 钉死（ProgressRail 在横向不把 along(progress) 交给 Motion）。
+   【为什么 top 不能用 50%】横向的滑块已从轨道内移到轨根层（必须在可视窗之外，
+   否则光晕会被 overflow: hidden 裁掉），因此纵向居中要按轨根那一列重新算：
+   读数 16 + 间隙 6 + 舞台内轨道顶 22 + 轨道高的一半 8 —— 与 __focus 同一行。 */
+.progress-rail--horizontal .progress-rail__thumb {
+  top: calc(var(--space-16) + var(--space-6) + var(--space-16) + var(--space-6) + var(--space-16) / 2);
+  left: 50%;
+  margin-top: -5.5px;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--color-accent) 26%, transparent),
+    0 calc(-1 * var(--space-6)) var(--space-16) color-mix(in srgb, var(--color-accent) 42%, transparent);
+}
+
+/* 中心光带：滑动点左右各一小段渐隐的 accent 光，并向上洇开一层柔光、缓慢呼吸。
+   这是横向版表达「现在是哪一刻」的唯一装饰（进度填充已在平移模型里取消）。
+   【为什么周期不用动效时长档】150/200/300ms 是「一次交互反馈」的档位，
+   而它是常驻的环境光呼吸，因此单独给 --rail-pulse-cycle；
+   缓动取 in-out，让两端停得住（与纵向版月份标签选 in-out 是同一条理由）。 */
+.progress-rail--horizontal .progress-rail__focus {
+  position: absolute;
+  left: 50%;
+  /* 轨道中心那一行 = 读数 16 + 间隙 6 + 舞台内轨道顶 22 + 轨道高的一半 8 */
+  top: calc(var(--space-16) + var(--space-6) + var(--space-16) + var(--space-6) + var(--space-16) / 2);
+  width: calc(var(--space-64) * 2);
+  height: 2px;
+  margin-top: -1px;
+  transform: translateX(-50%);
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+  box-shadow: 0 calc(-1 * var(--space-8)) var(--space-24) color-mix(in srgb, var(--color-accent) 30%, transparent);
+  pointer-events: none;
+  animation: rail-pulse var(--rail-pulse-cycle) var(--motion-easing-in-out) infinite;
+}
+
+/* 呼吸只改透明度：阴影与光带一起明暗，插值成本最低（不逐帧重算模糊半径） */
+@keyframes rail-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* 减少动效偏好：常驻呼吸关掉，光带保持常亮 */
+@media (prefers-reduced-motion: reduce) {
+  .progress-rail--horizontal .progress-rail__focus {
+    animation: none;
+  }
+}
+
+/* 浮标层：与轨道同宽同起点（同样的 --rail-end-pad），纵向则铺满整条轨。
+   横向的两层标签各自钉在三层里的固定一行，落点只由内联的 left 决定。 */
+.progress-rail--horizontal .progress-rail__floaters {
+  inset: 0 var(--rail-end-pad);
+}
+
+/* 内车道刻度数字（月尺度「9月」/ 日尺度「9/6」）：第一行，紧贴轨道上方。
+   与纵向版同一份数据、同一档字号；横向不换边，命中只换颜色（因此 is-on 也要复位 transform）。 */
+.progress-rail--horizontal .progress-rail__minor,
+.progress-rail--horizontal .progress-rail__minor.is-on {
+  top: calc(var(--space-16) / 2);
+  transform: translate(-50%, -50%);
+}
+
+/* 外车道大单位（月尺度=年份 / 日尺度=月份）：第三行，紧贴轨道下方。
+   位置恒定（不换边、不跟滚动点走）—— 大单位是这条轨的「章节」，位置恒定才能当路标读。 */
+.progress-rail--horizontal .progress-rail__major {
+  top: calc(100% - var(--space-16) / 2);
+  transform: translate(-50%, -50%);
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-medium);
+}
+
+/* 读数不再另做图腾：纵向由命中那一枚小单位标签自己滑到轨道右侧承担（落在第 2 栏的空白里，
+   既不压照片也不需要材质底）；横向则交给停靠条顶部那一行 __readout。 */
+
+/* --------------------------------------------------------------------------
+ * 列表视图：按「年月」分组，组内横竖混排的等高行 + 左侧同一条进度轨
+ * 不写死列数，也不量 DOM：每张卡的宽度由「目标行高 × 自身纵横比」算出，
+ * 于是同一行的横片与竖片等高、整行刚好铺满 —— 横竖混排不留空洞。
+ * -------------------------------------------------------------------------- */
+.list {
+  padding: 0 var(--space-16) var(--space-64);
+}
+
+/* 分组区落在第 3 栏；min-width 必须归零，否则长标题会把网格栏撑宽 */
+.list__groups {
+  grid-column: 3;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-40);
+  padding: var(--space-8) 0;
+}
+
+.list__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  min-width: 0;
+}
+
+/* 分组头：上方一条发丝分割线切段（与全站分割同一族的中性白，不用 accent 上色），
+   标题（年月）取主色调，紧跟分割线之下，与照片保持一格呼吸。 */
+.list__group-head {
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--color-border-base);
+  /* 标题与张数同行、基线对齐 —— 与墙面 .masonry__time-sep 同款同序 */
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+}
+
+.list__group-title {
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+  letter-spacing: var(--font-tracking-normal);
+}
+
+/* 组内张数：与墙面 .masonry__time-sep-count 一字不差 */
+.list__group-count {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--font-tracking-meta);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+/* 日尺度（list--fine）：分组单位从「月」降到「日」，组数会翻好几倍 ——
+   40px 的组间距与 12px 的组头留白会让一屏里几乎全是空白，因此按细刻度整体收紧。
+   分割线与标题本身不动：换的是「切多细」，不是「段长什么样」。 */
+.list--fine .list__groups {
+  gap: var(--space-24);
+}
+
+.list--fine .list__group-head {
+  padding-top: var(--space-8);
+}
+
+/* 等高行：整行一个 flex 容器，靠 flex-grow / flex-basis 的比值自动换行并铺满。
+   行内间距压到 space-4（栅格上最小的一档）：照片是同一段记忆的连续切片，
+   只留一条发丝缝来分界，读起来才像一整片印样。 */
+.list__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 伸缩权 = 纵横比，基准宽 = 目标行高 × 纵横比：
+   两个都用同一个 --card-aspect，行末各卡才刚好等高、且总和贴合容器宽度。 */
+.list__cell {
+  flex: var(--card-aspect) 0 calc(var(--list-row-h) * var(--card-aspect));
+  min-width: 0;
+}
+
+/* 行末填充：flex-grow 远大于任何照片的伸缩权，于是它吸走本组末行的全部剩余宽度，
+   末行照片停在基准高度上收尾，不会被拉成一条横贯整行的大图。自身不占高度。 */
+.list__row-filler {
+  flex: 9999 0 0;
+  height: 0;
+}
+
+.list-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  cursor: var(--cursor-pointer);
+  /* 卡片网格里 hover 只加厚一档材质：改尺寸会让整行重排、把下面的卡片推走，
+     滚动位置跟着跳 —— 抬起与聚拢留给墙面，列表是逐张读信息的视图。 */
+  transition: background var(--motion-duration-base);
+}
+
+.list-card:hover,
+.list-card:focus-visible {
+  background: var(--color-material-ultra-thin);
+}
+
+/* 缩略图按自身纵横比给高：高度恒等于 --list-row-h，卡片高度因此由「行高 + 元信息」决定。
+   position:relative 是给实况角标当定位参照（角标沿用墙面的 .photo-card__live）。 */
+.list-card__thumb {
+  position: relative;
+  overflow: hidden;
+}
+
+.list-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: 0 var(--space-8) var(--space-8);
+}
+
+/* PhotoMask 在墙面上是压在照片上的渐变蒙版（绝对定位），
+   在卡片里是照片下方的普通文本块 —— 结构一份、外壳两种，差异只在这里覆盖。 */
+.list-card__meta .photo-card__mask {
+  position: static;
+  padding: 0;
+  background: none;
+  gap: var(--space-4);
+}
+
+/* 列表卡片里没有「照片角落」可以钉：地点复位成 daterow 里的普通一员
+   （时间左侧），与墙面上那枚玻璃胶囊是同一份 DOM、两种外壳。 */
+.list-card__meta .photo-card__place {
+  position: static;
+  max-width: none;
+  height: auto;
+  padding: 0;
+  background: none;
+  backdrop-filter: none;
+}
+
+@media (max-width: 767px) {
+  /* 窄屏：塌成单栏。 */
+  .wall,
+  .list {
+    grid-template-columns: 1fr;
+    column-gap: var(--space-8);
+  }
+
+  /* 手机宽度下整块内容只有三百多像素，208px 的行高会让一行只容得下两三张：
+     行高降到 136px，让竖片能两两并肩，同时照片仍大到看得清是哪一张。 */
+  :root {
+    --list-row-h: calc(136px * var(--theme-scale));
+  }
+
+  /* 单栏时列号必须复位，否则内容区仍被钉在已经不存在的第 3 栏 */
+  .wall > .masonry,
+  .list__groups {
+    grid-column: auto;
+  }
+
+  /* 进度轨整体收起（拖拽在小屏上易与页面滚动冲突）。
+     隐藏的是「槽」与「停靠条」而不是 .progress-rail 本身：槽带着一条视口高的
+     网格栏位，只藏内层会让单栏布局里凭空多出近一屏空白，把内容整个推到首屏以下。 */
+  .rail-slot,
+  .rail-dock {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * 全屏查看器（§6.3 渐进 + §7.1 模态层）
+ * -------------------------------------------------------------------------- */
+.viewer {
+  position: fixed;
+  /* 铺满整块视口：这一层只承担「背板 + 点击空白处关闭」的命中区。
+     照片能长多大由 Viewer.tsx 的 fitRect 按视口算（只给底部胶片条让位），
+     若把容器本身缩成九成高，照片的天花板就被容器提前削掉一块。 */
+  inset: 0;
+  z-index: var(--z-surface-modal);
+  display: flex;
+  flex-direction: column;
+  /* 胶片条一枚缩略图的边长：改造前是 34px，先整体放大到 2 倍（68px），
+     再整体缩小 1.5 倍 —— 除出来的 45.33px 不是栅格值，就用这条算式表达，
+     免得有人看到裸数值又去「归整」。整条胶片条的尺寸都由它派生：
+     外圈外扩、内边距、条高，以及 Viewer.tsx 里用来算底部让位带的 stripH。 */
+  --strip-dot: calc((var(--space-64) + var(--space-4)) / 1.5);
+}
+
+/* 背板单独成层：它只负责「压暗 + 模糊」。
+   与照片画框分成两层，是为了让照片飞回网格的途中背板可以先退场 ——
+   若把背板的不透明度放在最外层容器上，画框会被一起淡掉。
+   fixed 铺满整屏：容器与视口同尺寸，但背板仍独立成层，便于单独淡出。 */
+.viewer__scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--color-material-opaque);
+  backdrop-filter: blur(var(--blur-sm));
+}
+
+/* 关闭按钮：原 viewer__top（顶部整条页头 + 暗色渐变纱幕）已移除，
+   只把关闭这一枚留在右上角。不再有铺满整行的背景条，因此不需要 ::before 纱幕 ——
+   按钮自己带材质（见 .icon-btn），压在照片上仍可读。 */
+.viewer__close {
+  position: absolute;
+  right: var(--space-8);
+  top: var(--space-8);
+  z-index: var(--z-inset-chrome);
+}
+
+/* 窄屏专属的 EXIF 抽屉开关：与关闭按钮对称地挂左上角（只在窄屏渲染，见 Viewer.tsx）。
+   两枚按钮因此各占一角，互不重叠。 */
+.viewer__exifbtn {
+  position: absolute;
+  left: var(--space-8);
+  top: var(--space-8);
+  z-index: var(--z-inset-chrome);
+}
+
+/* 照片画框：位置与尺寸由 Motion 在「网格矩形 ↔ 安全区矩形」之间补间（见 Viewer.tsx）。
+   因此这里只声明它是 fixed，不写任何尺寸。
+   overflow 必须是 visible：右侧的 EXIF 卡片挂在画框右缘之外，
+   它是画框的框外之物 —— 裁掉就看不见了。照片本体铺满画框（见 .viewer__img），
+   两端矩形的纵横比一致，因此不存在需要裁掉的溢出画面。 */
+.viewer__frame {
+  position: fixed;
+  overflow: visible;
+  /* EXIF 卡片的两个尺寸：与 sdk 的 themeExifWidth() / themeExifHeight() 一一对应；
+     宽屏时 fitRect 按 **--exif-w** 在右侧给照片让位（卡片高度取画框高，不需要单独读数）。
+     卡片离照片的那道间隙不在这里 —— 它是**动画的一部分**（见 .viewer__exifclip）。
+
+     【为什么写死 256 / 128 而不是 --space-64 * 4】--space-64 已被全局倍率放大过，
+     再乘一次专区倍率就成了双重放大（1.15 × 1.4），卡片会宽到挤压照片。
+     这里要的是「以基准尺寸为起点、只随专区倍率走」，因此用字面量。 */
+  --exif-w: calc(256px * var(--theme-exif-scale));
+  --exif-h: calc(128px * var(--theme-exif-scale));
+  /* 与网格里的照片同一套语言：照片不带圆角，放大后也不带 */
+  z-index: var(--z-inset-decoration);
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.6);
+}
+
+/* 缩放层：把照片包在里面，自己 overflow:hidden 把放大后的画面裁在画框内。
+   画框本身是 overflow:visible（右侧 EXIF 卡片挂在框外），所以裁切必须落在这一层。 */
+.viewer__zoom {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /* 未放大时这一层就是「点击放大」的命中区，因此给悬停环而不是放大镜 ——
+     环是本站「可点」的统一符号，换成 zoom-in 会自成一派。 */
+  cursor: var(--cursor-pointer);
+  /* 拖曳走指针事件，因此要禁掉浏览器自带的触摸手势 ——
+     否则触屏上按住拖动会被解释成页面平移，指针事件直接中断。 */
+  touch-action: none;
+}
+
+/* 放大态：按住左键即可拖曳，光标因此切到「动态区域 AF」——
+   那一圈小点就是本站「这块可以拖着走」的统一符号；按下与拖曳中同形，
+   因为拖曳本身已经把「正在动」这件事表达清楚了，不必再靠光标叠加信息。 */
+.viewer__zoom.is-zoomed,
+.viewer__zoom.is-dragging {
+  cursor: var(--cursor-drag);
+}
+
+/* 照片本体铺满画框：两端的矩形与照片纵横比一致，所以 cover 与 contain 等价，
+   形变过程中画面只会整体缩放，不会被拉歪。
+   【放大与拖曳为什么作用在这一层而不是外层容器】容器是「画框」，它的布局盒必须保持
+   未缩放 —— 拖曳换算与边界夹取都要读 getBoundingClientRect()，若容器自己带了 transform，
+   读到的就是放大后的尺寸，位移会越拖越偏。 */
+.viewer__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  /* transform 的补间只服务「放大 / 缩小」那一次切换；拖曳中由内联样式改成 none，
+     否则画面会「追」着指针走、明显滞后。 */
+  transition: opacity 550ms ease, transform 260ms var(--motion-easing-smooth);
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.viewer__img.is-loaded {
+  opacity: 1;
+}
+
+/* 实况视频：铺满画框并居中（contain —— 内嵌轨与照片比例略有差异时不裁掉画面），
+   压在照片之上；底下留黑，避免比照片窄时露出照片的边。 */
+.viewer__live {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  z-index: var(--z-inset-badge);
+}
+
+/* 实况播放按钮：按需求从页头移到照片右下角，浮在照片/视频之上。
+   按钮自带材质，压在任意画面上都可读；z-index 要高于 .viewer__live（视频层）。 */
+.viewer__livebtn {
+  position: absolute;
+  right: var(--space-12);
+  bottom: var(--space-12);
+  z-index: calc(var(--z-inset-badge) + 1);
+}
+
+/* 原片未到位时先压一层「底片色块」，避免纯黑等待 */
+.viewer__placeholder {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-md);
+  z-index: -1;
+}
+
+.viewer__spinner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-fill-base);
+  border-top-color: var(--color-accent);
+  animation: spin 800ms linear infinite;
+  z-index: var(--z-inset-decoration);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.viewer__arrows {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  justify-content: space-between;
+  padding: 0 var(--space-16);
+  pointer-events: none;
+}
+
+.viewer__arrows .icon-btn {
+  pointer-events: auto;
+  width: var(--size-button-md);
+  height: var(--size-button-md);
+  background: var(--color-material-ultra-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-context);
+  opacity: 0;
+  transition: opacity var(--motion-duration-base);
+}
+
+/* 桌面端：鼠标进入查看器才显形，减少对照片的干扰 */
+.viewer:hover .viewer__arrows .icon-btn,
+.viewer:focus-within .viewer__arrows .icon-btn {
+  opacity: 1;
+}
+
+.viewer__arrows .icon-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* --------------------------------------------------------------------------
+ * 底部横向缩略图导航条：原片下方的「胶片条」
+ * 一次只摆 20 张（窗口跟着当前这张滑动，见 Viewer.tsx），并且整体比上一版再小 1.5 倍：
+ * 一枚缩略图 --strip-dot(≈45.3px)、选中那张再额外交互放大 1.5 倍。
+ * 参考 Motion 的 iOS exposure slider 示例，把滑杆换成缩略图：
+ * 选中态的外圈由 layoutId 在两枚缩略图之间飞过去，而不是各自淡入淡出。
+ * 鼠标滚轮在这条上不滚动、而是**切换照片**（见 Viewer.tsx 的滚轮监听）。
+ * -------------------------------------------------------------------------- */
+.viewer__strip {
+  /* fixed 到屏幕最底部：胶片条要牢牢贴住视口下缘，而照片的可用区正是
+     「视口高 − 胶片条那一带」（见 Viewer.tsx 的 fitRect / safeBottom）。
+     定位基准必须是视口 —— 容器里还挂着画框等固定层，跟着它们走会被挤偏。
+     距底再向上微调一格（space-8）—— 贴边会显得被屏幕裁掉一块。 */
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--space-8);
+  z-index: var(--z-inset-chrome);
+  display: flex;
+  justify-content: center;
+  /* 左右只留一格：条本身要吃满可用宽度（见 .viewer__stripbox 的 width: 100%） */
+  padding: 0 var(--space-8);
+}
+
+.viewer__stripbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  /* 取满这条所能有的宽度：胶片条因此是一条通栏的玻璃带，而不是居中一小段 */
+  width: 100%;
+  max-width: 100%;
+  /* overflow-x: auto 会连带把纵向也算成 auto，于是这个盒子的内边距就是选中态的「余量」：
+     选中那张放大 1.5 倍后，连同外圈单边溢出 (--strip-dot / 2 + --space-4) × 1.5 − --strip-dot / 2 ≈ 17.3px，
+     所以上下各留 space-20（20 > 17.3），选中的那一枚才不会被裁掉上下两边。 */
+  overflow-x: auto;
+  padding: var(--space-20) var(--space-12);
+  /* 同上：胶片条横向滚到头之后，不要把剩余滚动量交给背景页 */
+  overscroll-behavior: contain;
+  /* 圆角只收到「容器比内部条目圆一档」这一档就够。
+     此前用 radius-full：条高只有 90 多像素，半径被钳到一半条高，两端直接变成半圆 ——
+     于是选中那枚的方角外圈会把边框顶出弧线，看起来像「圆角在变形」。
+     收到 xl 后四条边始终是直线，缩放的是照片、不是边框。 */
+  border-radius: var(--radius-xl);
+  background: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-xxl));
+  box-shadow: var(--elevation-neutral);
+  /* 这条是内容型滚动：滚动条本身没有信息量，隐藏滚动条，靠渐隐边缘暗示还有更多 */
+  scrollbar-width: none;
+}
+
+/* 缩略图整组居中：用首尾两枚的 auto 外边距吸收剩余空间，而**不是**给容器写
+   justify-content: center —— 后者在内容溢出时会把最左那几枚推到滚不到的位置
+   （负向溢出区不可达）。auto 外边距在有剩余空间时居中、溢出时自动归零，
+   于是宽屏居中、窄屏仍能从第一枚正常滚起。 */
+.viewer__stripbox > :first-child {
+  margin-left: auto;
+}
+
+.viewer__stripbox > :last-child {
+  margin-right: auto;
+}
+
+.viewer__stripbox::-webkit-scrollbar {
+  display: none;
+}
+
+.viewer__dot {
+  position: relative;
+  flex: none;
+  width: var(--strip-dot);
+  height: var(--strip-dot);
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: var(--cursor-pointer);
+}
+
+.viewer__dot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 选中态：外圈是一圈 accent 淡洗底（不是描边，遵守「控件一律不画描边」），
+   它带 layoutId，由 Motion 在切换时从上一枚「飞」到下一枚。
+   缩略图本身是照片，所以外圈也跟着切边。外扩量跟着整体缩小：6px → space-4。 */
+.viewer__dotring {
+  position: absolute;
+  inset: calc(var(--space-4) * -1);
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+}
+
+/* EXIF 卡片右下角的操作区：下载 + 点赞（原在页头）。
+   sticky bottom 让它常驻卡片右下角 —— 表格很长时不必滚到底才能点到；
+   margin-top:auto 让内容不足一屏时也贴到卡片底部，而不是悬在表格后面。 */
+.viewer__exifactions {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  /* 底部也留一格（原先为 0）：操作区因此一直贴到卡片底缘，
+     它自己的底色与模糊能盖满下半部分，不会在容器下方留出一条缝。 */
+  padding: var(--space-12) var(--space-12) var(--space-12);
+  /* 实色打底 + 向上渐隐：下段完全不吃透明（滚动上来的表格行因此绝不会透出来），
+     上段渐渐让位给表格 —— 读起来是「按钮浮在表格之上」，而不是一条硬边。
+     这里不用材质色（86% 透明）：它会让压在下面的行隐约可见，正是要修掉的那处穿透。 */
+  background-image: linear-gradient(to top, var(--color-background) 38%, transparent);
+  /* 模糊要跟着渐变一起铺满整个操作区（含渐隐那一段）：没有它，渐隐处的表格文字
+     会以清晰的形状露在按钮周围，「覆盖」就只覆盖了一半。 */
+  backdrop-filter: blur(var(--blur-md));
+}
+
+/* 「加载原片」的进行中 / 失败文案：紧跟在操作按钮左侧，字号收一档，失败用危险色。
+   只在有状态时出现，平时不占位。 */
+.viewer__origstate {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
+}
+
+.viewer__origstate.is-error {
+  color: var(--color-danger);
+}
+
+/* --------------------------------------------------------------------------
+ * EXIF 元数据卡片
+ * 两层结构：
+ *   外层 .viewer__exifclip 是**裁切窗** —— 紧贴画框右缘（left: 100%，不留缝），
+ *     overflow 裁掉窗外的一切；
+ *   内层 .viewer__exif 才是卡片本身，初值 x = -100%（自己整个宽度），藏进画框里侧。
+ * 那道「卡片与照片之间的间隙」不写在这里 —— 它是被 Motion 演出来的：
+ *   窗口从紧贴画框（x = 0）滑到退开一格（x = EXIF_GAP），卡片同时从 -100% 滑到 0。
+ * 于是打开时卡片像从照片右缘「长出来」再缓缓离开，关闭时反向「贴回照片」，
+ * 中途露出的永远只是窗口里那一条，不会在照片旁边留下半截黑条。
+ * 高度取 100%（= 画框高）：照片多高卡片就多高，内容装不下时卡内滚动。
+ * -------------------------------------------------------------------------- */
+.viewer__exifclip {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  width: var(--exif-w);
+  height: 100%;
+  overflow: hidden;
+}
+
+.viewer__exif {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-16) 0 var(--space-12);
+  border-radius: var(--radius-xl);
+  background: var(--color-material-ultra-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-context);
+  overflow-y: auto;
+  scrollbar-width: none;
+  /* 滚到顶 / 底之后不再把剩余滚动量交给背景页 —— 查看器背后那一页仍在滚动位置上，
+     少了这一条就会出现「滚 EXIF 卡片滚到头，背后的照片墙跟着动」的穿透。 */
+  overscroll-behavior: contain;
+}
+
+.viewer__exif::-webkit-scrollbar {
+  display: none;
+}
+
+/* 卡片顶部三行摘要：标题 / 分类·日期 / 拍摄地 —— 「基本信息」与下面的 EXIF 表分开一段 */
+.viewer__exifhead {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 0 var(--space-12) var(--space-12);
+}
+
+.viewer__exiftitle {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.viewer__exifmeta {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
+}
+
+/* 照片描述：整段正文，位于卡片顶部摘要与 EXIF 表之间。
+   【为什么用 pre-wrap】描述存的是纯文本，段落与换行就是它全部的排版手段 ——
+   默认的 white-space 会把多段挤成一坨；pre-wrap 既保留换行与空行，又照常自动折行。
+   【长文与窄屏】卡片窄屏时挂在照片下方，宽度随视口、正文自己折行；
+   两种形态下卡片高度都不变，超出的部分由卡片自身的滚动吸收，不会把照片挤小。 */
+.viewer__exifdesc {
+  flex: none;
+  padding: 0 var(--space-12) var(--space-12);
+  font-size: var(--font-size-caption);
+  line-height: 1.75;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  /* 没有空格的长串（网址 / 长英文词）也要能折断，否则会把定宽的卡片撑出横向滚动 */
+  overflow-wrap: anywhere;
+}
+
+/* ---- EXIF 卡片里的拍摄位置（内嵌 Leaflet 小地图） ----
+   与地图画廊同一套底图与玻璃针脚，只是收成一枚卡片内的方窗。
+   尺寸只有 256px 宽，因此不给控件之外的任何装饰 —— 多一行东西就少一行 EXIF。 */
+.photo-map-block {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--space-12) var(--space-12);
+}
+
+.photo-map__label {
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
+}
+
+.photo-map {
+  height: 132px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-base);
+  /* 瓦片没到之前先铺材质色，免得在暗色卡片里闪一块白 */
+  background: var(--color-material-thin);
+}
+
+/* leaflet 默认背景是浅灰（#ddd），在暗色卡片里是一块亮斑 */
+.photo-map.leaflet-container {
+  background: var(--color-material-thin);
+  font-family: var(--font-family-sans);
+}
+
+/* 缩放控件在小地图里收小一号，免得占掉半张卡片 */
+.photo-map .leaflet-control-zoom a {
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
+  font-size: var(--font-size-label);
+  background: var(--color-material-ultra-thick);
+  border-color: var(--color-border-base);
+  color: var(--color-text-secondary);
+}
+
+.photo-map .leaflet-control-zoom a:hover {
+  background: var(--color-material-thick);
+  color: var(--color-accent);
+}
+
+/* 署名：与地图画廊右下的 .map-credit 是同一句话，两处均不可省略 */
+.photo-map__credit {
+  margin: var(--space-4) 0 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-quaternary);
+  text-align: right;
+}
+
+/* 点位：一枚主色芯 + 白色玻璃环，与地图画廊的针脚同一套玻璃语汇。
+   这里没有缩略图可嵌，就把主色芯当作「内容」，环当作「玻璃壳」。
+   box-sizing 必须显式给：Leaflet 的锚点是按 iconSize 取中点的，
+   边框算进盒外会让圆点比锚点偏出 3px。 */
+.photo-map__dot {
+  box-sizing: border-box;
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  border: 3px solid color-mix(in srgb, var(--color-text-base) 62%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-background) 65%, transparent),
+    0 0 0 6px color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent),
+    var(--elevation-neutral);
+}
+
+.exif-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-6) var(--space-12);
+  font-size: var(--font-size-meta);
+  border-top: 1px solid var(--color-border-base);
+}
+
+.exif-row__k {
+  color: var(--color-text-tertiary);
+  flex: none;
+}
+
+.exif-row__v {
+  font-family: var(--font-family-mono);
+  text-align: right;
+}
+
+/* 窄屏（<900px）：照片左右没有余量摆卡片，EXIF 于是收成**底部抽屉** ——
+   平时完全收起（只留左上角一枚信息按钮），点开后从屏幕最底部整幅升起，卡片内纵向滚动。
+   900 这个断点必须与 Viewer.tsx 的 WIDE_MIN 一致。
+   【为什么不再横躺】手机竖屏时横躺的卡片只有 128px 高，EXIF 表被压成一堆竖排短列，
+   读起来要来回扫；抽屉能完整给出纵向的键值表，与宽屏同构。 */
+@media (max-width: 899px) {
+  .viewer__exifclip {
+    /* fixed 到视口：抽屉的位置只跟屏幕有关，不能跟着会飞会缩的画框走 */
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: 100%;
+    height: min(72vh, 560px);
+    /* 高于胶片条：抽屉展开时盖住它，两截玻璃面才不会互相压边 */
+    z-index: calc(var(--z-inset-chrome) + 2);
+  }
+
+  .viewer__exif {
+    /* 抽屉里恢复纵向卡片（与宽屏同构）：EXIF 是「键 → 值」的表，纵向读才对 */
+    flex-direction: column;
+    padding: var(--space-16) 0 var(--space-12);
+    /* 只有上沿在屏幕内，因此只圆上面两角 */
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    /* 抽屉要能盖住照片：材质比卡片本身再实一档，免得照片内容透上来干扰读表 */
+    background: var(--color-material-opaque);
+  }
+
+  /* 标题行：给右上角的收起按钮让出一格，标题不会被按钮压住 */
+  .viewer__exifhead {
+    position: relative;
+    padding-right: var(--space-40);
+  }
+
+  .viewer__exifclose {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
+}
+
+/* 退场期间：画框还在飞回网格，关闭按钮 / 箭头 / 胶片条正在淡出。
+   它们此刻都不该再接收点击 —— 否则会在照片飞到一半时把照片换掉（点缩略图）
+   或把关闭请求再发一次。窄屏的信息按钮与 EXIF 抽屉同理。 */
+.viewer.is-leaving .viewer__close,
+.viewer.is-leaving .viewer__exifbtn,
+.viewer.is-leaving .viewer__exifclip,
+.viewer.is-leaving .viewer__arrows,
+.viewer.is-leaving .viewer__strip {
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+ * 影集
+ * -------------------------------------------------------------------------- */
+.album-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-16);
+  margin-top: var(--space-20);
+}
+
+.album-card {
+  position: relative;
+  border-radius: var(--radius-xxl);
+  overflow: hidden;
+  padding: 0;
+  background: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-context);
+  transition: transform var(--motion-duration-slow) var(--motion-easing-smooth);
+}
+
+.album-card:hover {
+  transform: translateY(-4px);
+}
+
+/* 打开动作占满整卡；分享是绝对定位的二级按钮，悬停在封面右下 */
+.album-card__open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  cursor: var(--cursor-pointer);
+  text-align: left;
+  background: none;
+  border: 0;
+}
+
+.album-card__cover {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--color-material-ultra-thin);
+}
+
+.album-card__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 600ms var(--motion-easing-smooth);
+}
+
+.album-card:hover .album-card__cover img {
+  transform: scale(1.05);
+}
+
+.album-card__shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, var(--color-material-ultra-thick), transparent 60%);
+}
+
+.album-card__cnt {
+  position: absolute;
+  right: var(--space-8);
+  top: var(--space-8);
+  z-index: var(--z-inset-decoration);
+}
+
+.album-card__body {
+  padding: var(--space-12) var(--space-12) var(--space-16);
+}
+
+.album-card__name {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.album-card__desc {
+  font-size: var(--font-size-meta);
+  color: var(--color-text-tertiary);
+}
+
+/* 分享按钮：悬停在封面左上角，压在照片上要用 on-photo 描边（照片底色不可知） */
+.album-card__share {
+  position: absolute;
+  left: var(--space-8);
+  top: var(--space-8);
+  z-index: var(--z-inset-decoration);
+  height: var(--size-button-xs);
+  padding: 0 var(--space-10);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-base);
+  background: var(--color-material-ultra-thick);
+  border: 1px solid var(--color-border-on-photo);
+  backdrop-filter: blur(var(--blur-md));
+  transition: color var(--motion-duration-base), background var(--motion-duration-base);
+}
+
+.album-card__share:hover {
+  color: var(--color-accent);
+}
+
+/* 分组导航：与胶囊导航同源（材质 + 模糊 + 阴影表达深度）。
+   窄屏不换行 —— 改为横向滚动，标题行不会被一堆分组挤成两行。 */
+.album-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-16);
+  padding: var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-context);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.album-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.album-nav__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex: none;
+  height: 28px;
+  padding: 0 var(--space-12);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  transition: background var(--motion-duration-base), color var(--motion-duration-base);
+}
+
+.album-nav__chip:hover {
+  color: var(--color-text-base);
+}
+
+/* 激活态：实心 accent + 背景色文字（与胶囊导航的 is-on 同一套语言） */
+.album-nav__chip[aria-pressed='true'] {
+  background: var(--color-accent);
+  color: var(--color-background);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* 分组内的册数：小号弱化，不跟分组名抢注意力 */
+.album-nav__cnt {
+  font-size: var(--font-size-caption);
+  opacity: 0.7;
+}
+
+/* 分组区块：标题是一级信息，卡片网格紧随其后 */
+.album-group {
+  margin-top: var(--space-24);
+}
+
+.album-group__title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+  font-family: var(--font-family-serif);
+  font-size: var(--font-size-subheading, var(--font-size-label));
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--font-tracking-wide);
+}
+
+.album-group__cnt {
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-tertiary);
+}
+
+/* 窄屏：卡片更细一档，一屏能放下两列以上，分组聚合在手机上同样好读 */
+@media (max-width: 767px) {
+  .album-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: var(--space-12);
+  }
+}
+
+/* 读屏器专用：视觉上隐藏但保留可访问性（分享反馈播报用） */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --------------------------------------------------------------------------
+ * 工具
+ * -------------------------------------------------------------------------- */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-16);
+  margin-top: var(--space-20);
+}
+
+.tool-card {
+  border-radius: var(--radius-xxl);
+  padding: var(--space-20);
+  background: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-context);
+  transition: transform var(--motion-duration-slow) var(--motion-easing-smooth);
+}
+
+.tool-card:hover {
+  transform: translateY(-4px);
+}
+
+.tool-card__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-lg);
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+  color: var(--color-accent);
+  margin-bottom: var(--space-12);
+}
+
+.tool-card__icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.tool-card__name {
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-semibold);
+}
+
+.tool-card__desc {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-meta);
+  color: var(--color-text-tertiary);
+}
+
+/* 可交互的计算卡：跨整行铺开（字段网格需要横向空间），与静态工具卡区分 */
+.tool-card--filled {
+  grid-column: 1 / -1;
+  border-radius: var(--radius-xxl);
+  padding: var(--space-24);
+  background: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-context);
+}
+
+.tool-card--filled:hover {
+  transform: none;
+}
+
+/* ND 计算器：跨整行铺开 */
+.ndcalc {
+  grid-column: 1 / -1;
+  border-radius: var(--radius-xxl);
+  padding: var(--space-24);
+  margin-top: var(--space-6);
+  background: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-context);
+}
+
+.ndcalc__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.ndcalc__head .tool-card__icon {
+  margin-bottom: 0;
+}
+
+.ndcalc__title {
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-bold);
+}
+
+.ndcalc__hint {
+  font-size: var(--font-size-meta);
+  color: var(--color-text-tertiary);
+}
+
+.ndcalc__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-16);
+  margin-top: var(--space-16);
+}
+
+.field__label {
+  display: block;
+  margin-bottom: var(--space-6);
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--font-tracking-meta);
+  color: var(--color-text-tertiary);
+}
+
+.field__input {
+  width: 100%;
+  height: 36px;
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-body);
+  /* 无描边后输入框的可辨识度全靠材质，所以取 thin 而非 ultra-thin —— 后者在暗底上几乎看不出边界 */
+  background: var(--color-material-thin);
+  color: var(--color-text-base);
+  outline: none;
+  /* 无描边：聚焦反馈改用一圈内阴影，既不画边线也保住了键盘可达性 */
+  transition: box-shadow var(--motion-duration-base);
+}
+
+.field__input:focus {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 50%, transparent);
+}
+
+.preset-row {
+  display: flex;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  margin-top: var(--space-8);
+}
+
+.preset {
+  height: var(--size-button-xs);
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  background: var(--color-material-ultra-thin);
+  transition: color var(--motion-duration-base), background var(--motion-duration-base);
+}
+
+/* 与 .chip:hover 同款反馈：加厚一档材质，不画边线 */
+.preset:hover {
+  color: var(--color-text-base);
+  background: var(--color-material-thin);
+}
+
+/* 激活态：accent 淡洗底 + accent 文字。无描边 */
+.preset.is-on {
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+  color: var(--color-accent);
+}
+
+.ndcalc__result {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin-top: var(--space-16);
+  padding: var(--space-16);
+  border-radius: var(--radius-xl);
+  background: var(--color-material-thin);
+}
+
+.ndcalc__result-label {
+  width: 120px;
+  flex: none;
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--font-tracking-meta);
+  color: var(--color-text-tertiary);
+}
+
+.ndcalc__value {
+  font-family: var(--font-family-mono);
+  font-size: 26px;
+  font-weight: var(--font-weight-bold);
+  line-height: var(--font-leading-tight);
+  color: var(--color-accent);
+}
+
+.ndcalc__sub {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-meta);
+  color: var(--color-text-secondary);
+}
+
+/* 输入框单位后缀：与标签同排右对齐，不占整行 */
+.field__unit {
+  float: right;
+  color: var(--color-text-quaternary);
+  letter-spacing: var(--font-tracking-meta);
+}
+
+/* 结果解释行：标签在左、数值在右，等宽下划线式排布 */
+.tool-result__rows {
+  margin-top: var(--space-12);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.tool-result__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-16);
+}
+
+.tool-result__row-label {
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--font-tracking-meta);
+  color: var(--color-text-tertiary);
+}
+
+.tool-result__row-value {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-body);
+  color: var(--color-text-base);
+}
+
+
+
+/* 玻璃面板：材质 + 匹配模糊（配合 .mat-* 使用）+ 着色阴影。
+   无描边——深度只由叠加的透明层与阴影表达（§4.4 修订） */
+.glass-panel {
+  padding: var(--space-16);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elevation-context);
+}
+
+/* --------------------------------------------------------------------------
+ * 隐私与授权（需求 4）
+ * 三块：网格角标 / 查看器锁面板 / 密码解锁对话框。
+ * 共同语言与其它压照片的元件一致：厚材质 + 匹配模糊，不画描边。
+ * -------------------------------------------------------------------------- */
+
+/* 隐私角标：与 .photo-card__live 同款材质，只是换到左上角、收成圆底单图标
+   （实况要带「实况」二字，隐私只需一枚锁）。 */
+.photo-card__lock {
+  position: absolute;
+  left: var(--space-8);
+  top: var(--space-8);
+  z-index: var(--z-inset-badge);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-material-ultra-thick);
+  backdrop-filter: blur(var(--blur-md));
+  /* 纯指示物：点它等于点卡片 */
+  pointer-events: none;
+}
+
+.photo-card__lock svg {
+  width: 12px;
+  height: 12px;
+  color: var(--color-accent);
+}
+
+/* 查看器锁面板：压在（服务端给的）模糊图之上。
+   刻意不遮满 —— 以便看出「这里确实有张照片，只是看不清」，而不是一块空黑。 */
+.viewer__lock {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-inset-chrome);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12);
+  padding: var(--space-24);
+  text-align: center;
+  background: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-md));
+}
+
+.viewer__lockicon {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+  color: var(--color-accent);
+}
+
+.viewer__lockicon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.viewer__locktext {
+  max-width: 28ch;
+  font-size: var(--font-size-meta);
+  line-height: var(--font-leading-normal);
+  color: var(--color-text-secondary);
+}
+
+.viewer__lockbtn {
+  height: var(--size-button-md);
+  padding: 0 var(--space-20);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-background);
+  background: var(--color-accent);
+  transition: opacity var(--motion-duration-base);
+}
+
+.viewer__lockbtn:hover {
+  opacity: 0.88;
+}
+
+/* 解锁对话框：从查看器（模态面）派生出来的浮层，因此取 popover 一档，稳稳压在查看器之上 */
+.unlock {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-surface-popover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-24);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(var(--blur-sm));
+}
+
+.unlock__panel {
+  width: min(340px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-24);
+  border-radius: var(--radius-xxl);
+  text-align: center;
+  background: var(--color-material-ultra-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-context);
+}
+
+.unlock__icon {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+  color: var(--color-accent);
+}
+
+.unlock__icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.unlock__title {
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-base);
+}
+
+.unlock__hint {
+  font-size: var(--font-size-meta);
+  color: var(--color-text-tertiary);
+}
+
+.unlock__input {
+  width: 100%;
+  height: 40px;
+  padding: 0 var(--space-12);
+  border-radius: var(--radius-lg);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-body);
+  letter-spacing: var(--font-tracking-meta);
+  text-align: center;
+  background: var(--color-material-thin);
+  color: var(--color-text-base);
+  outline: none;
+  transition: box-shadow var(--motion-duration-base);
+}
+
+.unlock__input:focus {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 50%, transparent);
+}
+
+.unlock__input:disabled {
+  opacity: 0.45;
+}
+
+.unlock__error {
+  font-size: var(--font-size-caption);
+  color: var(--color-danger);
+}
+
+.unlock__actions {
+  width: 100%;
+  display: flex;
+  gap: var(--space-8);
+  margin-top: var(--space-4);
+}
+
+.unlock__btn {
+  flex: 1;
+  height: var(--size-button-md);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  background: var(--color-material-thin);
+  transition: color var(--motion-duration-base), background var(--motion-duration-base);
+}
+
+.unlock__btn:hover {
+  color: var(--color-text-base);
+  background: var(--color-material-thick);
+}
+
+.unlock__btn.is-primary {
+  color: var(--color-background);
+  background: var(--color-accent);
+}
+
+.unlock__btn.is-primary:hover {
+  background: var(--color-accent);
+  opacity: 0.88;
+}
+
+.unlock__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+ * 隐私分享页（#privacy-share?token=...）：给站外的人看的一页，
+ * 因此不挂站内导航，只留「说明 + 照片」两件事。
+ * -------------------------------------------------------------------------- */
+.share {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding-top: var(--space-64);
+}
+
+.share__head {
+  margin-bottom: var(--space-24);
+}
+
+/* 验链接 / 要提取码 / 链接失效：三种状态共用同一张居中的说明卡 */
+.share__notice {
+  max-width: 360px;
+  margin: var(--space-64) auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-24);
+  border-radius: var(--radius-xxl);
+  text-align: center;
+  background: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-context);
+}
+
+.share__notice-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+  color: var(--color-accent);
+}
+
+/* 链接失效时换成失败色：可快速区分「还要输码」与「已失效」 */
+.share__notice-icon.is-bad {
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  color: var(--color-danger);
+}
+
+.share__notice-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.share__notice-title {
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-base);
+}
+
+.share__hint {
+  font-size: var(--font-size-meta);
+  color: var(--color-text-tertiary);
+}
+
+/* 提取码：等宽 + 字距拉开，读起来像一串码而不是一个词 */
+.share__code {
+  letter-spacing: 0.4em;
+  font-size: var(--font-size-heading);
+}
+
+.share__submit {
+  flex: none;
+  width: 100%;
+}
+
+.share__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-16);
+}
+
+.share__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.share__caption {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+ * 减少动态效果（无障碍）：Motion 那部分由 MotionConfig reducedMotion="user" 保底，
+ * 这里把**纯 CSS** 的动画与过渡一并归零 —— 模块进场、查看器 loading 旋转、
+ * 各种 hover 过渡，在系统开启「减少动态」时都退化成瞬间完成。
+ * -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * 全局光标：四态一套 AF 对焦框（图形与配色见文件头 :root 里的 --cursor-*）
+ *
+ * 【为什么单独开一节统一处理，而不是逐组件就地改】光标是**跨组件的一致性**要求：
+ * 只要有一处漏改，鼠标移过去就会从自定义图案掉回系统箭头，即可看出不一致。
+ * 因此这里用一份全局规则盖住「所有可交互元素」，组件只在需要更强语义时
+ * （拖拽区、放大后的画面 → 动态区域 AF）才自行覆盖。
+ *
+ * 【权重说明】:where() 的贡献是 0，所以前两条只压得住浏览器默认样式，
+ * 任何组件级规则（如 .photo-card）都能覆盖它们；而 `:active` 那条自带 (0,1,0)，
+ * 靠**书写顺序**（本文件末尾）压过同为 (0,1,0) 的组件规则 —— 这正是「按下收出微点框」
+ * 能对照片卡、列表卡这类自定义按钮同样生效的原因。
+ * -------------------------------------------------------------------------- */
+html {
+  /* cursor 可继承，挂一处即全局生效 */
+  cursor: var(--cursor-default);
+}
+
+/* 可交互元素：悬停给绿框 —— 对焦框亮起是本站「可以点」的统一符号 */
+:where(a, button, [role='button'], [role='tab'], summary, label[for]) {
+  cursor: var(--cursor-pointer);
+}
+
+/* 按下：中心收出一枚小框（微点 AF）。状态反馈因此不再依赖每个组件各写一遍 */
+:where(a, button, [role='button'], [role='tab'], summary, label[for]):active {
+  cursor: var(--cursor-active);
+}
+
+/* 禁用态交还给系统光标：自定义图案会使用户误判为仍可点击 */
+:where(a, button, [role='button'], [role='tab'], summary, label[for]):disabled,
+:where([aria-disabled='true']) {
+  cursor: not-allowed;
+}
+
+/* 文本类输入必须留回 I-beam：html 上的箭头会被继承进来，
+   而「这里能打字」几乎是输入框唯一的非视觉线索，不能丢 */
+:where(input, textarea, [contenteditable]) {
+  cursor: text;
+}
+
+/* --------------------------------------------------------------------------
+ * 禁止拖拽：照片一律不可拖、不可长按呼出菜单
+ *
+ * 【为什么要禁】浏览器默认把 <img> 当成可拖拽对象：按住拖动会拽出一个半透明的
+ * 「照片幽灵」跟着指针走，松手落到标签页上还会直接打开这张图；触屏长按则弹出
+ * 「存储图像」菜单。本站所有照片的语义都是「点击打开查看器」，这两种行为都会
+ * 打断它 —— 图墙里尤其明显，因为按住照片本该触发卡片的附着位移。
+ *
+ * 【属性 + 样式两层，缺一不可】
+ *   · draggable={false}：HTML 属性，四家浏览器都认，是覆盖 Firefox 的那一层
+ *     （Firefox 不支持 -webkit-user-drag）。
+ *   · -webkit-user-drag: none：WebKit / Blink 系（Chrome / Edge / Safari）
+ *     额外需要它，才能彻底关掉图片与链接的原生拖拽。
+ *   · -webkit-touch-callout: none：iOS Safari 长按不再弹「存储图像」。
+ *   · user-select: none：拖拽时若同时选中了文字，浏览器会改拖「文字选区」而
+ *     不是照片，等于绕过了前两条 —— 图片本体因此必须一并关掉选中。
+ *
+ * 【容器层为什么不关 user-select】卡片 / 列表项里还有标题与 EXIF 文本，桌面端
+ * 选中它们属于正常操作，不该被牵连，所以容器只关「拖」与「长按菜单」。
+ * 容器层同样不能加 touch-action: none —— 那会把页面滚动一起废掉
+ * （查看器的拖曳层是唯一例外，见 .viewer__zoom）。
+ * -------------------------------------------------------------------------- */
+
+/* 图片本体：拖拽 / 长按 / 选中，三件事一起关 */
+.progressive__img,
+.viewer__img,
+.viewer__dot img {
+  -webkit-user-drag: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* 承载照片的外层（占位框 / 卡片 / 列表项 / 查看器各层）：只关拖拽与长按菜单 */
+.progressive,
+.photo-card,
+.list-card,
+.list__cell,
+.viewer__frame,
+.viewer__zoom,
+.viewer__stripbox,
+.viewer__dot,
+.album-card,
+.share__item {
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
+
+/* --------------------------------------------------------------------------
+ * 顶栏操作区 + EXIF 搜索面板（需求 3）
+ * -------------------------------------------------------------------------- */
+.topnav__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+/* 搜索面板：顶栏下方居中展开的玻璃卡片，只认右上角关闭按钮 */
+.search-panel {
+  position: fixed;
+  top: var(--size-header);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-surface-popover);
+  width: min(720px, calc(100vw - var(--space-32)));
+  padding: var(--space-16) var(--space-16) var(--space-12);
+  border-radius: var(--radius-xl);
+  background: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-context);
+}
+
+.search-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-12);
+}
+
+/* 标签筛选器：搜索面板的第一行（在字段栅格之上）。
+   与栅格之间用 margin 拉开，其余内部间距统一用 flex gap，避免各处写不同的 margin。 */
+.tag-filter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-bottom: var(--space-16);
+}
+
+/* 已选区：选中的标签独立成行，× 就地取消 */
+.tag-filter__selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+/* 过滤框吃满剩余宽度，展开按钮固定不缩 —— 窄屏下按钮不会被输入框挤到换行 */
+.tag-filter__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.tag-filter__head .search-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.tag-filter__head .search-action {
+  flex: none;
+  height: 36px;
+}
+
+/* 候选区：默认限高可滚，几十枚标签也不会把面板撑到屏幕外；展开后放开到够用为止 */
+.tag-filter__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  max-height: 88px;
+  overflow-y: auto;
+}
+
+.tag-filter__options.is-expanded {
+  max-height: 240px;
+}
+
+/* 候选标签：沿用 .chip 的观感（26px 高），只补按钮复位与计数样式 */
+.tag-filter__option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  cursor: pointer;
+}
+
+.tag-filter__option svg {
+  width: 12px;
+  height: 12px;
+}
+
+.tag-filter__count {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-quaternary);
+}
+
+/* 选中项里的计数跟随 accent 字色，免得「已选」与「未选」的灰数字看成一样 */
+.tag-filter__option.is-on .tag-filter__count {
+  color: inherit;
+  opacity: 0.7;
+}
+
+.tag-filter__empty {
+  font-size: var(--font-size-label);
+  color: var(--color-text-quaternary);
+}
+
+/* 窄屏（含移动端浏览器）：标签是主要的触控目标，把点击区放大到 36px 以上 */
+@media (max-width: 767px) {
+  .tag-filter__option {
+    min-height: 36px;
+    padding: 0 var(--space-16);
+  }
+
+  .tag-filter__options {
+    max-height: 132px;
+  }
+}
+
+.search-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.search-field__label {
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--font-tracking-brand);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.search-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-lg);
+  background: var(--color-material-thin);
+  color: var(--color-text-base);
+  font-size: var(--font-size-body);
+  /* 与后台（antd）对齐：hover 描边提亮、focus 描边转 accent，都是一档 200ms */
+  transition:
+    border-color var(--motion-duration-base) var(--motion-easing-smooth),
+    background var(--motion-duration-base) var(--motion-easing-smooth);
+}
+
+/* 多行输入（照片描述）：解掉单行写死的 36px 高与上下内边距，改成按 rows 长高。
+   边框 / 材质 / 悬停与聚焦反馈都沿用 .search-input 那一套，并排时看不出是两种控件。 */
+.search-input--multiline {
+  height: auto;
+  min-height: 88px;
+  padding: var(--space-8) var(--space-12);
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.search-input:hover {
+  border-color: color-mix(in srgb, var(--color-text-base) 22%, transparent);
+}
+
+.search-input:focus,
+.search-input:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.search-panel__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-8);
+  margin-top: var(--space-16);
+  padding-top: var(--space-12);
+  /* 一条发丝线把「填条件」与「提交」分成两段，按钮不再浮在字段里显得零散 */
+  border-top: 1px solid var(--color-border-base);
+}
+
+.search-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-8) var(--space-16);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-label);
+  cursor: pointer;
+  transition:
+    color var(--motion-duration-base) var(--motion-easing-smooth),
+    background var(--motion-duration-base) var(--motion-easing-smooth),
+    border-color var(--motion-duration-base) var(--motion-easing-smooth);
+}
+
+.search-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.search-action:hover {
+  color: var(--color-text-base);
+  background: color-mix(in srgb, var(--color-text-base) 8%, transparent);
+}
+
+.search-action.is-primary {
+  background: var(--color-accent);
+  color: var(--color-background);
+  font-weight: var(--font-weight-semibold);
+}
+
+.search-action.is-primary:hover {
+  background: var(--color-accent-secondary);
+  color: var(--color-background);
+}
+
+/* 关闭：右上角唯一的收口。命中区比图标大一整圈，免得「看得见却点不准」 */
+.search-panel__close {
+  position: absolute;
+  top: var(--space-8);
+  right: var(--space-8);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition:
+    color var(--motion-duration-fast) var(--motion-easing-smooth),
+    background var(--motion-duration-fast) var(--motion-easing-smooth);
+}
+
+.search-panel__close:hover {
+  color: var(--color-text-base);
+  background: color-mix(in srgb, var(--color-text-base) 10%, transparent);
+}
+
+.search-panel__close svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* --------------------------------------------------------------------------
+ * 自建下拉（组合框 / 点选菜单）
+ * 与后台 antd Select 对齐：同色描边、同圆角、同展开动画、同选中态（accent + 勾）
+ * -------------------------------------------------------------------------- */
+.combo {
+  position: relative;
+}
+
+/* 触发按钮：借用 .search-input 的尺寸与描边，只把内部排成「文字 + 箭头」 */
+.combo__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  cursor: pointer;
+}
+
+.combo__caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--color-text-quaternary);
+  transition: transform var(--motion-duration-base) var(--motion-easing-smooth);
+}
+
+.combo__caret svg {
+  width: 14px;
+  height: 14px;
+}
+
+.combo__caret.is-open {
+  transform: rotate(180deg);
+}
+
+/* 有值时把小箭头换成清空按钮：同一块位置只承担一个语义 */
+.combo__clear {
+  position: absolute;
+  top: 50%;
+  right: var(--space-8);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-quaternary);
+  cursor: pointer;
+}
+
+.combo__clear:hover {
+  color: var(--color-text-base);
+}
+
+.combo__clear svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* 下拉面板：与搜索面板同一套材质与阴影，浮在字段下方 */
+.dropdown {
+  position: absolute;
+  top: calc(100% + var(--space-4));
+  left: 0;
+  right: 0;
+  z-index: var(--z-inset-badge);
+  max-height: 220px;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-lg);
+  background: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-neutral);
+  /* 展开动画：轻微下滑 + 淡入，与 antd 的下拉节奏一致 */
+  animation: dropdown-in var(--motion-duration-fast) var(--motion-easing-smooth);
+}
+
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  width: 100%;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* hover 与键盘高亮共用一个视觉，两者不会同时出现在不同项上 */
+.dropdown__option.is-active {
+  background: color-mix(in srgb, var(--color-text-base) 8%, transparent);
+  color: var(--color-text-base);
+}
+
+/* 选中态：accent 文字 + 勾，与后台的选中项一致 */
+.dropdown__option.is-on {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+.dropdown__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdown__check {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.dropdown__hint {
+  padding: var(--space-8) var(--space-12);
+  color: var(--color-text-quaternary);
+  font-size: var(--font-size-label);
+}
+
+/* --------------------------------------------------------------------------
+ * 前台账号面板 + 编辑对话框 + 选择模式（需求 4）
+ * -------------------------------------------------------------------------- */
+
+/* 账号面板：顶栏右缘展开的玻璃卡片，复用搜索面板的收口语义 */
+.account-panel {
+  position: fixed;
+  top: var(--size-header);
+  right: var(--space-16);
+  z-index: var(--z-surface-popover);
+  width: 320px;
+  padding: var(--space-16);
+  border-radius: var(--radius-xl);
+  background: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-context);
+}
+.account-panel__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+.account-panel__error {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-danger);
+}
+.account-panel__signed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+.account-panel__who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+.account-panel__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-full);
+  background: var(--color-material-thin);
+  color: var(--color-accent);
+}
+.account-panel__icon svg {
+  width: 18px;
+  height: 18px;
+}
+.account-panel__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.account-panel__name {
+  font-size: var(--font-size-label);
+}
+.account-panel__role {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-quaternary);
+}
+.account-panel__logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  padding: var(--space-8) var(--space-16);
+  border-radius: var(--radius-full);
+  background: var(--color-material-thin);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  cursor: pointer;
+}
+.account-panel__logout svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 编辑对话框：居中浮层，与查看器同层级 */
+.edit-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: var(--z-surface-modal);
+  width: min(560px, calc(100vw - var(--space-32)));
+  max-height: calc(100vh - var(--space-64));
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-xl);
+  background: var(--color-material-thick);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--elevation-context);
+}
+.edit-dialog__head {
+  flex: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-12) var(--space-16);
+  border-bottom: 1px solid var(--color-border-base);
+}
+.edit-dialog__title {
+  margin: 0;
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+}
+.edit-dialog__body {
+  flex: 1;
+  overflow-y: auto;
+  /* 滚到顶 / 底后不把剩余滚动量沿祖先链传给背景页（与 .viewer__exif、.viewer__stripbox 同口径） */
+  overscroll-behavior: contain;
+  padding: var(--space-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+.edit-dialog__section {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--font-tracking-brand);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+.edit-dialog__unit {
+  font-style: normal;
+  color: var(--color-text-quaternary);
+}
+.edit-dialog__hint {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-quaternary);
+}
+.edit-dialog__gps {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-12);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--color-border-base);
+}
+.edit-dialog__clear {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+.edit-dialog__error {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-danger);
+}
+.edit-dialog__actions {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-16);
+  border-top: 1px solid var(--color-border-base);
+}
+.edit-dialog__clear-tag {
+  margin-left: var(--space-8);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-quaternary);
+  font-size: var(--font-size-caption);
+  cursor: pointer;
+}
+.edit-dialog__clear-tag.is-on {
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  color: var(--color-danger);
+}
+
+/* 选择模式下的浮动批量操作条 */
+.edit-bar {
+  position: sticky;
+  top: var(--size-header);
+  z-index: var(--z-surface-chrome);
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: var(--space-12) 0;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-full);
+}
+.edit-bar__count {
+  font-size: var(--font-size-label);
+  color: var(--color-text-secondary);
+}
+
+/* 卡片选择态：勾选角标 + 选中描边 */
+.photo-card__check {
+  position: absolute;
+  top: var(--space-8);
+  right: var(--space-8);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--color-text-base);
+  background: color-mix(in srgb, var(--color-material-ultra-thick) 60%, transparent);
+}
+.photo-card.is-selected .photo-card__check,
+.list-card.is-selected .photo-card__check {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-background);
+}
+.photo-card__check svg {
+  width: 13px;
+  height: 13px;
+}
+.photo-card.is-selectable,
+.list-card.is-selectable {
+  cursor: pointer;
+}
+.photo-card.is-selected,
+.list-card.is-selected {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+ * EXIF 全量编辑（前台对齐后台能力，视觉仍走前台 token）
+ *
+ * 【为什么另开一节而不是并入 .edit-dialog】后台这一块有 41 个字段 / 7 个分组，
+ * 后台是 antd Drawer + Collapse + Form，前台只有 `.edit-dialog` 的三条基础规则，
+ * 直接堆进去会让「元数据那一小段」和「EXIF 这一大片」混在一起读不清。
+ * -------------------------------------------------------------------------- */
+
+/* 需要容纳两列字段栅格，比普通编辑对话框宽一档 */
+.edit-dialog--wide {
+  width: min(880px, calc(100vw - var(--space-32)));
+}
+
+/* 文件信息行：三列「小字灰 label + 值」，对应后台 Descriptions 的三列布局 */
+.exif-fileinfo {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-12);
+  padding-bottom: var(--space-12);
+  border-bottom: 1px solid var(--color-border-base);
+}
+
+.exif-fileinfo__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.exif-fileinfo__label {
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--font-tracking-brand);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.exif-fileinfo__value {
+  font-size: var(--font-size-label);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 字段分组：原生 <details> 折叠面板，展开态默认开启（与后台 Collapse 一致） */
+.exif-group {
+  padding: var(--space-12);
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-lg);
+  background: var(--color-material-ultra-thin);
+}
+
+.exif-group__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  /* 去掉 <summary> 的默认三角，箭头改由 .exif-group__caret 承担以便加旋转动画 */
+  list-style: none;
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-base);
+  user-select: none;
+}
+
+.exif-group__summary::-webkit-details-marker {
+  display: none;
+}
+
+.exif-group__count {
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-quaternary);
+}
+
+/* 箭头推到最右，与后台 Collapse 的箭头位置一致；展开时旋转 180° */
+.exif-group__caret {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-quaternary);
+  transition: transform var(--motion-duration-base) var(--motion-easing-smooth);
+}
+
+.exif-group[open] .exif-group__caret {
+  transform: rotate(180deg);
+}
+
+.exif-group__caret svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 字段栅格：两列，textarea / tags 占满整行（见 .exif-field--wide） */
+.exif-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-12);
+  margin-top: var(--space-12);
+}
+
+.exif-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.exif-field--wide {
+  grid-column: 1 / -1;
+}
+
+.exif-field__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+/* label 与 .search-field__label 同款：小字、大写、四级灰 */
+.exif-field__label {
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--font-tracking-brand);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+.exif-field__hint {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-quaternary);
+}
+
+/* textarea 借用 .search-input 的描边与底色，只把固定行高改成可增高 */
+.edit-dialog__area {
+  height: auto;
+  min-height: 58px;
+  padding: var(--space-8) var(--space-12);
+  line-height: 1.5;
+  font-family: inherit;
+  resize: vertical;
+}
+
+/* 多值 tag 输入框：外形是一个输入框，内部是「标签 + 光标」 */
+.exif-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  min-height: 36px;
+  padding: var(--space-4) var(--space-8);
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-lg);
+  background: var(--color-material-thin);
+  transition:
+    border-color var(--motion-duration-base) var(--motion-easing-smooth),
+    background var(--motion-duration-base) var(--motion-easing-smooth);
+}
+
+/* 焦点感交给外层容器，内层输入框自己不再画描边 */
+.exif-tags:focus-within {
+  border-color: var(--color-accent);
+}
+
+.exif-tags.is-disabled {
+  opacity: 0.55;
+}
+
+.exif-tags__input {
+  flex: 1;
+  min-width: 96px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-base);
+  font-size: var(--font-size-label);
+  font-family: inherit;
+  outline: none;
+}
+
+.exif-tags__input::placeholder {
+  color: var(--color-text-quaternary);
+}
+
+/* 可移除标签：在 .chip 基础上收窄右内边距，给 × 让位 */
+.chip--removable {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding-right: var(--space-4);
+}
+
+.exif-tags__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  transition:
+    opacity var(--motion-duration-fast) var(--motion-easing-smooth),
+    background var(--motion-duration-fast) var(--motion-easing-smooth);
+}
+
+.exif-tags__remove svg {
+  width: 10px;
+  height: 10px;
+}
+
+.exif-tags__remove:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--color-text-base) 12%, transparent);
+}
+
+/* 自定义 tag：一行一个「tag 名 + 值 + 删除」，对应后台 CustomTagEditor 的 Space.Compact */
+.exif-custom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.exif-custom__row {
+  display: grid;
+  /* tag 名短、值长；第三列固定容纳删除按钮 */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) 28px;
+  gap: var(--space-8);
+  align-items: center;
+}
+
+/* 非法 tag 名会直接拼进 exiftool 命令行，这里在输入阶段就给红边预警 */
+.exif-custom__tag.is-invalid {
+  border-color: var(--color-danger);
+}
+
+.exif-custom__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-quaternary);
+  transition:
+    color var(--motion-duration-fast) var(--motion-easing-smooth),
+    background var(--motion-duration-fast) var(--motion-easing-smooth);
+}
+
+.exif-custom__remove svg {
+  width: 14px;
+  height: 14px;
+}
+
+.exif-custom__remove:hover {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+}
+
+.exif-custom__add {
+  align-self: flex-start;
+  padding: var(--space-6) var(--space-12);
+  border-radius: var(--radius-full);
+  background: var(--color-material-thin);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  transition:
+    color var(--motion-duration-base) var(--motion-easing-smooth),
+    background var(--motion-duration-base) var(--motion-easing-smooth);
+}
+
+.exif-custom__add:hover {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+/* 定位区：手输纬 / 经 + 「文件里是否有定位」状态行 */
+.exif-gps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-12);
+}
+
+.exif-gps__status {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.exif-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-8);
+  border-radius: var(--radius-full);
+  background: var(--color-material-thin);
+  color: var(--color-text-quaternary);
+  font-size: var(--font-size-caption);
+}
+
+.exif-badge.is-on {
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+  color: var(--color-accent);
+}
+
+/* 地图选点（leaflet）：容器必须有明确高度，否则地图完全不显示 */
+.gps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.gps__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.gps__toolbar-label {
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--font-tracking-brand);
+  text-transform: uppercase;
+  color: var(--color-text-quaternary);
+}
+
+/* 提示文案带 title，光标给 help 而不是默认箭头 */
+.gps__toolbar-tip {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-quaternary);
+  cursor: help;
+}
+
+/* 搜索地点 / 定位当前位置：与「在图上单击选点」并行的另一条选点入口 */
+.gps__search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.gps__search-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-6) var(--space-12);
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-full);
+  background: var(--color-material-thin);
+  color: var(--color-text-base);
+  font-family: inherit;
+  font-size: var(--font-size-label);
+}
+
+.gps__search-input::placeholder {
+  color: var(--color-text-quaternary);
+}
+
+.gps__search-input:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+/* 搜索 / 定位两枚按钮：不抢主行动（「保存」）的视觉，用材质而不是实心主色 */
+.gps__btn {
+  flex: none;
+  padding: var(--space-6) var(--space-12);
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-full);
+  background: var(--color-material-thin);
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-caption);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--motion-duration-fast) var(--motion-easing-smooth),
+    border-color var(--motion-duration-fast) var(--motion-easing-smooth);
+}
+
+.gps__btn:hover:not(:disabled) {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.gps__btn:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: default;
+}
+
+/* 命中列表：整行两块信息（地点名 / 坐标），名字长到换行也不挤掉坐标 */
+.gps__hits {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.gps__hit {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-12);
+  width: 100%;
+  padding: var(--space-8) var(--space-12);
+  border: 0;
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-caption);
+  text-align: left;
+  cursor: pointer;
+}
+
+.gps__hit:hover {
+  background: var(--color-material-thin);
+  color: var(--color-accent);
+}
+
+.gps__hit-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 坐标等宽：几条命中挨着看时，位数能对齐才方便比对 */
+.gps__hit-coord {
+  flex: none;
+  font-family: var(--font-family-mono);
+  color: var(--color-text-quaternary);
+}
+
+/* 失败提示与「未找到」共用一行 —— 都是「这次搜索没有结果」，只是原因不同 */
+.gps__error {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
+}
+
+.gps-map {
+  height: 260px;
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* leaflet 自带 .leaflet-container 的背景是浅灰（#ddd），
+   两选择器合并提升优先级，免得被 leaflet.css 覆盖成亮块 */
+.gps-map.leaflet-container {
+  background: var(--color-material-thin);
+  font-family: inherit;
+}
+
+/* 缩放控件默认白底黑字，在暗色玻璃卡片里过于跳，改成同套材质 */
+.gps-map .leaflet-control-zoom a {
+  background: var(--color-material-thick);
+  border-color: var(--color-border-base);
+  color: var(--color-text-secondary);
+}
+
+.gps-map .leaflet-control-zoom a:hover {
+  color: var(--color-accent);
+  background: var(--color-material-thick);
+}
+
+/* 三行读数：底图原始坐标 / WGS-84 / 与已有定位的偏差
+   等宽数字是为了逐位比对坐标；② 用 accent 高亮 —— 它才是真正写进文件的那一组 */
+.gps-readout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+
+.gps-readout__row {
+  line-height: 1.6;
+}
+
+.gps-readout__row.is-wgs {
+  color: var(--color-accent);
+}
+
+/* 中性提示：与 .edit-dialog__error 的危险色区分开，用于「已清空 XX」「没有需要保存的改动」 */
+.edit-dialog__notice {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+
+/* 下拉无值时的灰字（SelectMenu 的 placeholder） */
+.dropdown__text.is-placeholder {
+  color: var(--color-text-quaternary);
+}
+
+/* 禁用态：自定义光标会使用户误判为仍可点击，这里统一压暗并交还系统光标 */
+.search-input:disabled,
+.combo__trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* 窄屏：80px 一列放不下两列栅格，全部降为单列 */
+@media (max-width: 767px) {
+  .edit-dialog--wide {
+    width: calc(100vw - var(--space-16));
+  }
+
+  .exif-fileinfo,
+  .exif-grid,
+  .exif-gps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .exif-custom__row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * 工具 · 本地 EXIF 工作台（免登录 · 纯本地）
+ *
+ * 【为什么单开一节】工作台是「列表 + 参数面板 + 底部操作」两层栅格，
+ * 与计算器卡片（一张卡一条结果）结构完全不同；抽成一节，也免得与 .tool-* 互相污染。
+ * -------------------------------------------------------------------------- */
+
+/* 面板型工具卡片：整行铺开、整块可点，靠 .tool-card 的材质与悬浮动效保持同族 */
+.tool-card--panel {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tool-card--panel .tool-card__icon {
+  margin-bottom: var(--space-8);
+}
+
+/* 「免登录 · 断网可用」标记：与 .localexif-badge 同款，但落在卡片上 */
+.tool-card__badge {
+  margin-top: var(--space-8);
+  padding: 2px var(--space-8);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+  color: var(--color-accent);
+  font-size: var(--font-size-caption);
+}
+
+.localexif__back {
+  margin-bottom: var(--space-12);
+}
+
+.localexif__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  margin: var(--space-16) 0 var(--space-12);
+}
+
+/* label 当按钮用：真正的 input[type=file] 由 .sr-only 隐藏，点击交给它触发 */
+.localexif__import {
+  position: relative;
+}
+
+.localexif__summary {
+  margin-left: auto;
+  font-size: var(--font-size-meta);
+  color: var(--color-text-quaternary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 处理中：导入按钮置灰不可再点，避免同一批文件被并发读两遍 */
+.localexif__import.is-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* 进度条：长任务（44MB×N 的 RAW 导入/写入）必须让用户看见「还在动」 */
+.localexif-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin-bottom: var(--space-12);
+  font-size: var(--font-size-meta);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.localexif-progress__text {
+  white-space: nowrap;
+}
+
+.localexif-progress__track {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--color-border-base);
+  overflow: hidden;
+}
+
+.localexif-progress__bar {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  transition: width var(--motion-duration-base) var(--motion-easing-smooth);
+}
+
+/* 左栏列表 + 右栏参数面板；窄屏降为上下堆叠 */
+.localexif {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: var(--space-16);
+  align-items: start;
+}
+
+.localexif-list {
+  padding: var(--space-12);
+  border-radius: var(--radius-xl);
+  background: var(--color-material-thin);
+  backdrop-filter: blur(var(--blur-md));
+}
+
+.localexif-list__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.localexif-list__count {
+  font-size: var(--font-size-meta);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.localexif-list__acts {
+  display: flex;
+  align-items: center;
+}
+
+/* 列表限高可滚：照片多时不让整页被列表撑长，右栏始终在手边 */
+.localexif-list__items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin-top: var(--space-8);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.localexif-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--radius-md);
+  transition: background var(--motion-duration-base) var(--motion-easing-smooth);
+}
+
+.localexif-item:hover {
+  background: var(--color-material-ultra-thin);
+}
+
+/* 勾选态：accent 淡洗底，与图墙卡片选中态同一语汇 */
+.localexif-item.is-selected {
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+}
+
+/* 只读行（非 JPEG / 解析失败）：压暗但仍可识别、可移除 */
+.localexif-item.is-readonly {
+  opacity: var(--opacity-disabled);
+}
+
+.localexif-item__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  cursor: pointer;
+}
+
+.localexif-item__box {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--color-accent);
+  cursor: inherit;
+}
+
+.localexif-item__thumb {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--color-material-thin);
+  color: var(--color-text-quaternary);
+}
+
+.localexif-item__thumb svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 缩略图盖在占位相机图标之上；图渲染不出来时被隐藏，露出下面的占位 */
+.localexif-item__thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.localexif-item__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.localexif-item__name {
+  font-size: var(--font-size-label);
+  color: var(--color-text-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.localexif-item__meta {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-quaternary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.localexif__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  min-width: 0;
+}
+
+.localexif-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+/* 字段徽章：值不一致 / 将修改 / 将清除 */
+.localexif-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-8);
+  border-radius: var(--radius-full);
+  background: var(--color-material-thin);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+  white-space: nowrap;
+}
+
+.localexif-badge.is-on {
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+  color: var(--color-accent);
+}
+
+.localexif-badge.is-danger {
+  background: color-mix(in srgb, var(--color-danger) calc(var(--opacity-state-wash) * 100%), transparent);
+  color: var(--color-danger);
+}
+
+.localexif-field__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-4);
+}
+
+/* 值不一致时连标签一起提亮：可快速识别该字段各张取值不同 */
+.exif-field.is-inconsistent .exif-field__label {
+  color: var(--color-accent);
+}
+
+/* 容器字段（XMP / IPTC）：整块压暗，控件 disabled，并给出原因 */
+.exif-field.is-disabled {
+  opacity: var(--opacity-disabled);
+}
+
+.exif-field__note {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-danger);
+}
+
+/* 数字字段：滑块 + 可精确输入的数字框 + 保底区间说明 */
+.localexif-number {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px auto;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.localexif-number__range {
+  width: 100%;
+  accent-color: var(--color-accent);
+}
+
+.localexif-number__input {
+  font-family: var(--font-family-mono);
+}
+
+.localexif-number__bounds {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-quaternary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 曝光三要素的双输入：自由输入框 + 档位下拉（前台查看器与工具模块共用） */
+.exposure-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.exposure-input .search-input.is-invalid {
+  border-color: var(--color-danger);
+}
+
+/* 错误与「超出档位范围」提示都跨两列，独占一行 */
+.exposure-input__error,
+.exposure-input__note {
+  grid-column: 1 / -1;
+  font-size: var(--font-size-caption);
+}
+
+.exposure-input__error {
+  color: var(--color-danger);
+}
+
+.exposure-input__note {
+  color: var(--color-text-quaternary);
+}
+
+/* 工作台的地图选位区块：外层只补「标题 + 徽标」这一条壳，地图本体沿用后台同款 .gps */
+.localexif-gps {
+  display: grid;
+  gap: var(--space-12);
+  margin-bottom: var(--space-20);
+}
+
+.localexif-gps__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+.localexif-gps__label {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
+}
+
+.localexif-empty {
+  margin-top: var(--space-20);
+  padding: var(--space-24);
+  border-radius: var(--radius-xxl);
+  background: var(--color-material-thin);
+  backdrop-filter: blur(var(--blur-md));
+}
+
+.localexif-empty__title {
+  margin-bottom: var(--space-12);
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-semibold);
+}
+
+.localexif-empty__steps {
+  padding-left: var(--space-20);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  font-size: var(--font-size-label);
+  color: var(--color-text-secondary);
+}
+
+/* 二次确认条：贴在视口底部随页面走，不遮挡参数面板 */
+.localexif-confirm {
+  position: sticky;
+  bottom: var(--space-16);
+  z-index: var(--z-surface-chrome);
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin-top: var(--space-16);
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-xl);
+  background: var(--color-material-ultra-thick);
+  backdrop-filter: blur(var(--blur-xxl));
+  box-shadow: var(--elevation-neutral);
+  font-size: var(--font-size-label);
+  color: var(--color-text-base);
+}
+
+.localexif-confirm span {
+  flex: 1;
+}
+
+.localexif__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-12);
+  margin-top: var(--space-16);
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--color-border-base);
+}
+
+.localexif__footer-hint {
+  flex: 1;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-quaternary);
+}
+
+/* 拖放投放遮罩：全屏覆盖，用 accent 虚线框 + 毛玻璃底把「松手即导入」讲清楚。
+   pointer-events: none 是关键 —— 遮罩自己不参与命中，dragenter/leave 的深度计数才不会被它搅乱 */
+.localexif-dropzone {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12);
+  font-size: var(--font-size-body);
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-background) 78%, transparent);
+  backdrop-filter: blur(var(--blur-md));
+  border: 2px dashed var(--color-accent);
+  pointer-events: none;
+}
+
+/* 导出设置：命名规则与保存位置两行，紧贴导出按钮上方 */
+.localexif-export {
+  margin-top: var(--space-16);
+  padding: var(--space-12);
+  border-radius: var(--radius-xl);
+  background: var(--color-material-thin);
+  backdrop-filter: blur(var(--blur-md));
+}
+
+.localexif-export__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.localexif-export__row + .localexif-export__row {
+  margin-top: var(--space-8);
+}
+
+.localexif-export__label {
+  min-width: 72px;
+  font-size: var(--font-size-meta);
+  color: var(--color-text-tertiary);
+}
+
+.localexif-export__select {
+  width: auto;
+}
+
+.localexif-export__input {
+  width: 180px;
+}
+
+.localexif-export__hint {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-quaternary);
+}
+
+.localexif-export__preview {
+  margin: var(--space-8) 0 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-quaternary);
+}
+
+/* 预览名用等宽字体：可清晰识别后缀与扩展名，而不是混在句子里读过去 */
+.localexif-export__preview code {
+  font-family: var(--font-family-mono);
+  color: var(--color-accent);
+}
+
+/* 禁用态：既有页面没定义过，这里补一档，免得禁用按钮看起来还能点 */
+.search-action:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+.search-action:disabled:hover {
+  color: var(--color-text-tertiary);
+  background: transparent;
+}
+
+@media (max-width: 900px) {
+  .localexif {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .localexif-list__items {
+    max-height: 40vh;
+  }
+
+  /* 单列时参数面板宽度有限，两列栅格会挤成窄条 */
+  .localexif .exif-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .localexif-number {
+    grid-template-columns: minmax(0, 1fr) 84px;
+  }
+
+  .localexif-number__bounds {
+    display: none;
+  }
+
+  /* 窄屏下两行导出设置会挤成多层换行：改为纵向堆叠，输入框吃满整行 */
+  .localexif-export__row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .localexif-export__label {
+    min-width: 0;
+  }
+
+  .localexif-export__select,
+  .localexif-export__input {
+    width: 100%;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * 地图画廊（#map）
+ * 一个不滚动的页面：工具栏一行、地图吃掉剩余高度。
+ * -------------------------------------------------------------------------- */
+
+/* 让位页头（fixed）后吃满视口。页面本身不滚动，因此这里只做高度，不做 sticky */
+.module--map {
+  padding-top: var(--size-header);
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 工具栏与 .gallery-toolbar 同款留白；不 sticky —— 页面不滚动，没有钉住的需求 */
+.map-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-16) var(--space-8);
+}
+
+/* 底图胶囊推到右侧：「看什么」在左、「用哪张底图看」在右，与画廊工具栏同一读法 */
+.map-toolbar__basemap {
+  margin-left: auto;
+}
+
+.map-toolbar__hint {
+  font-size: var(--font-size-meta);
+  color: var(--color-text-quaternary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 地图舞台：吃掉剩余高度，并建独立层叠上下文 ——
+   leaflet 内部控件 z-index 高达 1000，不隔离会盖住悬浮页头 */
+.map-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  z-index: 0;
+}
+
+/* leaflet 容器必须有明确高度：flex 子项 + 绝对定位盒是最稳的一种给法 */
+.map-canvas {
+  position: absolute;
+  inset: 0;
+  /* 瓦片没到之前先铺一层材质色，免得闪出白块 */
+  background: var(--color-material-thin);
+}
+
+/* leaflet 默认背景是浅灰（#ddd），在暗色站里是一块亮斑 */
+.map-canvas.leaflet-container {
+  background: var(--color-material-thin);
+  font-family: var(--font-family-sans);
+}
+
+/* 缩放控件默认白底黑字，过于跳，改成同套材质 */
+.map-canvas .leaflet-control-zoom {
+  border: none;
+  box-shadow: var(--elevation-neutral);
+}
+
+.map-canvas .leaflet-control-zoom a {
+  background: var(--color-material-ultra-thick);
+  border-color: var(--color-border-base);
+  color: var(--color-text-secondary);
+}
+
+.map-canvas .leaflet-control-zoom a:hover {
+  background: var(--color-material-thick);
+  color: var(--color-accent);
+}
+
+/* leaflet 的默认 divIcon 是白底 + 黑边，整块清掉，外观完全交给内部元素 */
+.map-marker {
+  background: transparent;
+  border: 0;
+}
+
+/* 透明玻璃针脚：玻璃壳 + 内嵌缩略图。
+   「玻璃」＝ 半透明底 + 背后模糊 + 发丝描边，三件缺一个就退化成半透明色块；
+   壳厚 3px（padding）—— 这一圈里透出来的是底图，针脚因此读起来像压在图上的一块玻璃，
+   而不是贴在图上的一张圆头像。底图有浅（高德）有深（OSM），
+   所以描边只用白色发丝（与 border.on-photo 同一口径），不用具体颜色去配。 */
+.map-pin {
+  display: block;
+  width: 44px;
+  height: 44px;
+  padding: 3px;
+  border-radius: var(--radius-full);
+  background: var(--color-material-medium);
+  backdrop-filter: blur(var(--blur-md)) saturate(1.5);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(1.5);
+  border: 1px solid color-mix(in srgb, var(--color-text-base) 34%, transparent);
+  /* 三件事叠起来：内侧上缘一道高光（玻璃受光）、外侧一圈暗垫底（浅瓦片上也有边）、
+     最后才是站内的中性阴影配方 */
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-base) 48%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-background) 55%, transparent),
+    var(--elevation-neutral);
+  transition: transform var(--motion-duration-base) var(--motion-easing-smooth),
+    box-shadow var(--motion-duration-base) var(--motion-easing-smooth);
+}
+
+.map-pin img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  /* 与图墙同一条规矩：图片本体既不可拖出也不可长按唤起菜单 */
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.map-pin:hover {
+  transform: scale(1.08);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-base) 48%, transparent),
+    0 0 0 1px var(--color-accent),
+    var(--elevation-neutral);
+}
+
+/* 簇标记：同一块玻璃，只是把内嵌的缩略图换成张数。
+   计数用主色（不是反白）—— 玻璃底是半透明的暗色，主色在其上比白字更醒目。 */
+.map-cluster {
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: var(--color-material-medium);
+  backdrop-filter: blur(var(--blur-md)) saturate(1.5);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(1.5);
+  border: 1px solid color-mix(in srgb, var(--color-text-base) 34%, transparent);
+  color: var(--color-accent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-base) 48%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-background) 55%, transparent),
+    var(--elevation-neutral);
+  transition: transform var(--motion-duration-base) var(--motion-easing-smooth),
+    box-shadow var(--motion-duration-base) var(--motion-easing-smooth);
+}
+
+.map-cluster b {
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  /* 浅色瓦片透过玻璃后仍是浅色，给字一圈极淡的暗晕，读数在两种底图上都清楚 */
+  text-shadow: 0 1px 2px color-mix(in srgb, var(--color-background) 60%, transparent);
+}
+
+.map-cluster:hover {
+  transform: scale(1.08);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-base) 48%, transparent),
+    0 0 0 1px var(--color-accent),
+    var(--elevation-neutral);
+}
+
+/* ---- 浮层卡片（L.popup 承载） ---- */
+
+/* leaflet 默认气泡是纯白，在暗色底图上很刺眼，整块换成站内材质 */
+.map-canvas .leaflet-popup-content-wrapper {
+  padding: 0;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border-base);
+  background: var(--color-material-ultra-thick);
+  backdrop-filter: blur(var(--blur-xxl));
+  box-shadow: var(--elevation-neutral);
+  color: var(--color-text-base);
+}
+
+/* leaflet 会按内容写死宽度，这里让卡片自己撑 */
+.map-canvas .leaflet-popup-content {
+  margin: 0;
+  width: auto !important;
+}
+
+.map-canvas .leaflet-popup-tip {
+  border: 1px solid var(--color-border-base);
+  background: var(--color-material-ultra-thick);
+}
+
+.map-canvas .leaflet-popup-close-button {
+  color: var(--color-text-tertiary);
+  padding: var(--space-6) var(--space-8) 0 0;
+}
+
+.map-canvas .leaflet-popup-close-button:hover {
+  color: var(--color-accent);
+}
+
+.map-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12);
+  min-width: 208px;
+}
+
+/* 缩略图是整张卡片的主入口（点它 → 打开该点位的放大器），因此包一层按钮：
+   键盘能到、焦点可见，且不必给 img 挂点击 —— 与查看器里其它「图片即按钮」处同一条做法。 */
+.map-card__thumbbtn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  cursor: pointer;
+}
+
+.map-card__thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  opacity: 0.92;
+  transition: opacity var(--motion-duration-base) var(--motion-easing-smooth),
+    transform var(--motion-duration-base) var(--motion-easing-smooth);
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.map-card__thumbbtn:hover .map-card__thumb {
+  opacity: 1;
+  transform: scale(1.03);
+}
+
+/* 触屏没有 hover，靠这一行明确说明「图可点击」 */
+.map-card__hint {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-quaternary);
+}
+
+.map-card__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+}
+
+.map-card__title {
+  overflow: hidden;
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-card__cat {
+  flex: none;
+  padding: 1px var(--space-6);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-accent) calc(var(--opacity-accent-wash) * 100%), transparent);
+  color: var(--color-accent);
+  font-size: var(--font-size-caption);
+}
+
+.map-card__row {
+  display: flex;
+  gap: var(--space-8);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+}
+
+.map-card__label {
+  flex: none;
+  width: 28px;
+  color: var(--color-text-quaternary);
+}
+
+.map-card__value {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  word-break: break-word;
+}
+
+/* 同一机位多张：横向缩略图条 */
+.map-card__strip {
+  display: flex;
+  gap: var(--space-6);
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.map-card__mini {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  cursor: pointer;
+  opacity: 0.86;
+  transition: opacity var(--motion-duration-base) var(--motion-easing-smooth);
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.map-card__mini:hover {
+  opacity: 1;
+}
+
+.map-card__more {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-quaternary);
+}
+
+/* ---- 空态与版权 ---- */
+
+/* 空态盖在地图上；pointer-events: none 让底图仍可平移，只是没什么可看的 */
+.map-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  padding: var(--space-24);
+  text-align: center;
+  background: color-mix(in srgb, var(--color-background) 72%, transparent);
+  backdrop-filter: blur(var(--blur-md));
+  pointer-events: none;
+}
+
+.map-empty__title {
+  margin: 0;
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-base);
+}
+
+.map-empty__tip {
+  margin: 0;
+  font-size: var(--font-size-label);
+  color: var(--color-text-tertiary);
+}
+
+/* 底图版权：OSM 与高德都要求署名，压在右下角、不参与交互 */
+.map-credit {
+  position: absolute;
+  right: var(--space-8);
+  bottom: var(--space-6);
+  z-index: 1;
+  padding: 1px var(--space-6);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-background) 72%, transparent);
+  color: var(--color-text-quaternary);
+  font-size: var(--font-size-caption);
+  pointer-events: none;
+}
+
+/* 窄屏：分类 chip 一行横向滚动，别把地图挤成一条缝 */
+@media (max-width: 768px) {
+  .map-toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .map-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* 横向滚动容器里 margin-left:auto 会把胶囊顶到无穷远，改用固定间距 */
+  .map-toolbar__basemap {
+    margin-left: var(--space-8);
+  }
+
+  .map-toolbar__hint {
+    display: none;
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@shaping-memory/db",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Drizzle schema + PostgreSQL 客户端 + 迁移（对应产品方案 §7 的核心表）",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.38.4",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.10",
+    "drizzle-kit": "^0.30.4",
+    "dotenv": "^16.4.5"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "塑忆",
+    "slug": "shaping-memory",
+    "version": "1.0.0",
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#1c1c1e",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1c1c1e"
+    },
+    "newArchEnabled": false,
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "./plugins/withAndroidPatches",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "塑忆需要访问您的位置信息，用于为照片写入拍摄地点。"
+        }
+      ]
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "cn.alsw.shapingmemory"
+    },
+    "android": {
+      "package": "cn.alsw.shapingmemory",
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1c1c1e"
+      }
+    }
+  }
+}

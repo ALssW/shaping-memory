@@ -1,0 +1,9 @@
+{
+  "name": "@shaping-memory/core",
+  "version": "1.0.0",
+  "private": true,
+  "description": "领域模型与纯函数：Web 前台 / RN 移动端 / Web 后台 / 后端共用同一份数据与计算逻辑",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@shaping-memory/admin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "塑忆后台管理（Vite + React + AntD）：照片管理与 EXIF 全量编辑",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@shaping-memory/core": "*",
+    "@shaping-memory/design-tokens": "*",
+    "@shaping-memory/sdk": "*",
+    "antd": "^5.22.5",
+    "dayjs": "^1.11.13",
+    "leaflet": "^1.9.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.15",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

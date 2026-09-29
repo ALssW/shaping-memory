@@ -1,0 +1,42 @@
+{
+  "name": "@shaping-memory/api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "后端 API 服务（NestJS 模块化单体，产品方案 §4）",
+  "scripts": {
+    "dev": "ts-node -r tsconfig-paths/register src/main.ts",
+    "start": "ts-node -r tsconfig-paths/register src/main.ts",
+    "import": "ts-node -r tsconfig-paths/register src/import-cli.ts",
+    "seed": "ts-node -r tsconfig-paths/register src/seed-admin.ts",
+    "seed:catalog": "ts-node -r tsconfig-paths/register src/seed-catalog.ts",
+    "clear": "ts-node -r tsconfig-paths/register src/clear-data.ts",
+    "backfill:place": "ts-node -r tsconfig-paths/register src/backfill-place.ts",
+    "backfill:objects": "ts-node -r tsconfig-paths/register src/backfill-objects.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.4.4",
+    "@nestjs/core": "^10.4.4",
+    "@nestjs/jwt": "^12.0.2",
+    "@nestjs/platform-express": "^10.4.4",
+    "@shaping-memory/config": "*",
+    "@shaping-memory/core": "*",
+    "@shaping-memory/db": "*",
+    "@shaping-memory/exif": "*",
+    "@shaping-memory/image": "*",
+    "@shaping-memory/storage": "*",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^16.4.5",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.10.2",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.6.3"
+  }
+}

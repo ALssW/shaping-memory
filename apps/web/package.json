@@ -1,0 +1,31 @@
+{
+  "name": "@shaping-memory/web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "塑忆 Web 前台（Vite + React + TS），消费 packages/design-tokens 的 Web 产物",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@shaping-memory/core": "*",
+    "@shaping-memory/design-tokens": "*",
+    "@shaping-memory/sdk": "*",
+    "leaflet": "^1.9.4",
+    "motion": "^13.4.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.15",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
