@@ -308,6 +308,26 @@ export interface PhotoUploadResult {
   upload: ObjectSyncResult;
 }
 
+/**
+ * 彻底删除的结果：逐项计数 + 失败明细（failures 非空即代表数据库一行未动，可直接重试）。
+ * 【为什么要回这么多计数】彻底删除会同时清云端对象、本机文件与关联记录，
+ * 用户确认后需要看见每一项分别清掉了多少，才能判断这次操作是否完整生效。
+ */
+export interface PhotoPurgeResult {
+  /** 已从数据库删除的照片数 */
+  purged: number;
+  /** 已删除的本机文件数 */
+  filesRemoved: number;
+  /** 已删除的云端对象数 */
+  objectsRemoved: number;
+  /** 被裁剪掉这些照片的分享链接数（含因清空而被整条删除的） */
+  sharesPruned: number;
+  /** 清理掉的孤立标签数 */
+  tagsPruned: number;
+  /** 失败明细；非空即代表本次未删库，可重试 */
+  failures: string[];
+}
+
 export const photoApi = {
   /**
    * 整份档案读取（可带筛选）。专用检索入口见 searchApi.photos。
@@ -345,6 +365,27 @@ export const photoApi = {
   /** 批量软删除（需 admin） */
   async removeBatch(ids: string[]): Promise<{ removed: number }> {
     return request('/photos/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+  },
+
+  /**
+   * 彻底删除单张（需 admin）：清除云端副本、本机文件与数据库记录，不可恢复。
+   * 与 remove（软删除）的区别在于这里连文件与关联记录一并抹掉，且不提供恢复入口。
+   */
+  async purge(id: string): Promise<PhotoPurgeResult> {
+    return request(`/photos/${id}/purge`, { method: 'DELETE' });
+  },
+
+  /**
+   * 批量彻底删除（需 admin）：语义与单张一致，由后端逐个执行并汇总计数。
+   * 【为什么调用方要分批】一次请求塞入过多 id 会让物理清理串行过久、请求超时；
+   * 调用方按固定批量分批提交，任一批失败即可停在该批，不至于把整次操作判成失败。
+   */
+  async purgeBatch(ids: string[]): Promise<PhotoPurgeResult> {
+    return request('/photos/purge', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids }),

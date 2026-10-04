@@ -151,15 +151,35 @@ export async function uploadPhotoObjects(
   return result;
 }
 
+/** 与 ObjectSyncResult 同形的清理结果：只计数与收集文案，由调用方决定怎么说给用户听 */
+export interface ObjectRemoveResult {
+  /** 已成功删除的对象数（对象本来就不存在也算成功，remove 是幂等的） */
+  removed: number;
+  failures: string[];
+}
+
 /**
  * 清除某张照片在云端的全部副本（原片 + 生成物）。
  * 【为什么本机文件不动】本地才是正本，云端只是一份副本；这里删的是副本。
  * `remove()` 本身幂等，因此对「从没上传过」的照片调用也不会出错。
+ * 【为什么把失败回给调用方而不吞掉】彻底删除要求原子性：云端没清干净就必须中止，
+ * 否则会出现「库里的记录没了、桶里还留着照片」这种既不可见也清不掉的状态。
  */
-export async function removePhotoObjects(store: ObjectStore | null, row: PhotoObjectSource): Promise<void> {
-  if (!store) return;
+export async function removePhotoObjects(
+  store: ObjectStore | null,
+  row: PhotoObjectSource,
+): Promise<ObjectRemoveResult> {
+  if (!store) return { removed: 0, failures: [] };
   const keys = photoObjectKeys(row);
+  const result: ObjectRemoveResult = { removed: 0, failures: [] };
   for (const key of [keys.original, keys.thumb, keys.card, keys.live]) {
-    if (key) await store.remove(key);
+    if (!key) continue;
+    try {
+      await store.remove(key);
+      result.removed += 1;
+    } catch (error) {
+      result.failures.push(`${key}: ${(error as Error).message}`);
+    }
   }
+  return result;
 }

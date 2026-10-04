@@ -42,6 +42,8 @@ import { PhotoUploadModal } from '../components/PhotoUploadModal';
 import { FolderUploadModal } from '../components/FolderUploadModal';
 import { BatchMetaModal } from '../components/BatchMetaModal';
 import { BatchExifDrawer } from '../components/BatchExifDrawer';
+import { PurgeConfirmModal } from '../components/PurgeConfirmModal';
+import type { PurgeTarget } from '../components/PurgeConfirmModal';
 import { PRIVACY_MARK_COLOR, PRIVACY_MARK_LABEL, PRIVACY_MARK_OPTIONS } from '../lib/privacy-modes';
 import type { PrivacyMark } from '../lib/privacy-modes';
 
@@ -76,6 +78,14 @@ function mergeOptions(prev: string[], next: readonly string[]): string[] {
 /** 空值统一显示为破折号：表格里「没有这个参数」与「参数是空串」应保持一致 */
 function orDash(value: string | number | null | undefined) {
   return value === '' || value == null ? <span className="t-qua">—</span> : <>{value}</>;
+}
+
+/**
+ * 照片 → 彻底删除确认清单项。
+ * 展示名优先用标题；无标题时退回上传时的原始文件名（用户更能对上号），都没有才用 id。
+ */
+function purgeTargetOf(photo: Photo): PurgeTarget {
+  return { id: photo.id, name: photo.title || photo.originalName || photo.id };
 }
 
 /** 标签格：把这张照片上的标签名平铺出来（空则显示破折号） */
@@ -127,7 +137,7 @@ const MAX_COLUMN_WIDTH = 480;
 const COLUMN_STORAGE_KEY = 'shaping-memory-admin.photo-columns';
 
 /** 操作列宽度：固定列，不参与拖拽、也不持久化，保证破坏性操作永远在同一处 */
-const ACTION_COLUMN_WIDTH = 210;
+const ACTION_COLUMN_WIDTH = 300;
 
 interface ColumnPrefs {
   order: string[];
@@ -327,6 +337,8 @@ export function PhotoManager() {
   const [folderUpload, setFolderUpload] = useState(false);
   const [batchMeta, setBatchMeta] = useState(false);
   const [batchExif, setBatchExif] = useState(false);
+  /** 彻底删除确认弹层的目标清单；null 表示弹层关闭（单张与批量共用同一个入口） */
+  const [purgeTargets, setPurgeTargets] = useState<PurgeTarget[] | null>(null);
 
   /* --- 列设置：宽度与顺序持久化到本地；操作列固定在最后，不参与 --- */
   /** 初始偏好只在挂载时读一次：之后以 state 为准，避免拖拽中被本地存档覆盖 */
@@ -416,7 +428,7 @@ export function PhotoManager() {
     async (photo: Photo): Promise<void> => {
       try {
         await photoApi.remove(photo.id);
-        message.success(`已删除「${photo.title || photo.id}」`);
+        message.success(`已将「${photo.title || photo.id}」移入软删除`);
         await load();
       } catch (error) {
         message.error(error instanceof Error ? error.message : '删除失败');
@@ -429,15 +441,15 @@ export function PhotoManager() {
     const ids = selectedKeys.map(String);
     if (ids.length === 0) return;
     modal.confirm({
-      title: `确认删除选中的 ${ids.length} 张照片？`,
-      content: '照片会从相册中移除，原文件仍会保留，需要时可由管理员恢复。',
-      okText: '确认删除',
+      title: `确认将选中的 ${ids.length} 张照片移入软删除？`,
+      content: '照片会从相册中移除，原文件与数据库记录仍会保留，需要时可由管理员恢复。若需不可恢复地清除，请改用「批量彻底删除」。',
+      okText: '移入软删除',
       okButtonProps: { danger: true },
       cancelText: '取消',
       onOk: async () => {
         try {
           const result = await photoApi.removeBatch(ids);
-          message.success(`已删除 ${result.removed} 张照片`);
+          message.success(`已将 ${result.removed} 张照片移入软删除`);
           setSelectedKeys([]);
           await load();
         } catch (error) {
@@ -446,6 +458,18 @@ export function PhotoManager() {
       },
     });
   }, [selectedKeys, modal, message, load]);
+
+  /** 打开彻底删除确认弹层（单张与批量共用）：只负责把照片换成确认清单项 */
+  const openPurge = useCallback((list: Photo[]): void => {
+    if (list.length === 0) return;
+    setPurgeTargets(list.map(purgeTargetOf));
+  }, []);
+
+  /** 批量彻底删除：按当前选中项组装清单（保持列表顺序，便于用户逐条核对） */
+  const handleBatchPurge = useCallback((): void => {
+    const chosen = new Set(selectedKeys.map(String));
+    openPurge(photos.filter((photo) => chosen.has(photo.id)));
+  }, [photos, selectedKeys, openPurge]);
 
   /** 批量写操作完成后的统一收尾：清空选中并重拉列表（页面上各处结果都变了） */
   const refreshAfterBatch = useCallback((): void => {
@@ -631,21 +655,26 @@ export function PhotoManager() {
             编辑拍摄参数
           </Button>
           <Popconfirm
-            title="确认删除这张照片？"
-            description="照片会从相册中移除，原文件仍会保留。"
-            okText="删除"
+            title="确认移入软删除？"
+            description="照片会从相册中移除，原文件与数据库记录仍会保留，需要时可由管理员恢复。"
+            okText="移入软删除"
             cancelText="取消"
             okButtonProps={{ danger: true }}
             onConfirm={() => handleRemove(record)}
           >
             <Button type="link" size="small" danger>
-              删除
+              移入软删除
             </Button>
           </Popconfirm>
+          <Tooltip title="清除云端副本、本机缓存与数据库记录，不可恢复">
+            <Button type="link" size="small" danger onClick={() => openPurge([record])}>
+              彻底删除
+            </Button>
+          </Tooltip>
         </Space>
       ),
     }),
-    [handleRemove],
+    [handleRemove, openPurge],
   );
 
   /**
@@ -829,9 +858,16 @@ export function PhotoManager() {
             批量编辑拍摄参数
           </Button>
         </Tooltip>
-        <Button danger disabled={selectedKeys.length === 0} onClick={handleBatchRemove}>
-          批量删除
-        </Button>
+        <Tooltip title="从相册移除，原文件与数据库记录保留，可由管理员恢复">
+          <Button danger disabled={selectedKeys.length === 0} onClick={handleBatchRemove}>
+            批量移入软删除
+          </Button>
+        </Tooltip>
+        <Tooltip title="清除云端副本、本机缓存与数据库记录，不可恢复">
+          <Button danger type="primary" disabled={selectedKeys.length === 0} onClick={handleBatchPurge}>
+            批量彻底删除
+          </Button>
+        </Tooltip>
       </div>
 
       <ColumnDragContext.Provider value={dragApi}>
@@ -925,6 +961,14 @@ export function PhotoManager() {
         open={batchExif}
         ids={selectedIds}
         onClose={() => setBatchExif(false)}
+        onDone={refreshAfterBatch}
+      />
+
+      {/* 彻底删除：单张与批量共用同一个确认弹层，targets 为 null 即关闭 */}
+      <PurgeConfirmModal
+        open={purgeTargets !== null}
+        targets={purgeTargets ?? []}
+        onClose={() => setPurgeTargets(null)}
         onDone={refreshAfterBatch}
       />
     </>

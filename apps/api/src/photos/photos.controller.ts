@@ -1,9 +1,10 @@
 /**
  * apps/api/src/photos/photos.controller.ts
  *
- * 读接口（list/get）公开；写接口（编辑/删除）套 JWT + RBAC：
+ * 读接口（list/get）公开；写接口（编辑/删除/彻底删除）套 JWT + RBAC：
  *   - 编辑（PATCH）需要 admin 或 editor
  *   - 删除（DELETE/batch）需要 admin
+ *   - 彻底删除（purge）需要 admin：不可恢复，权限不再下放
  */
 import {
   BadRequestException,
@@ -25,10 +26,15 @@ import type { MaybeAuthedRequest } from '../auth/optional-jwt.guard';
 import { Roles, RolesGuard } from '../auth/roles.guard';
 import { buildListFilter, parsePage } from './filter-params';
 import { ApiPhoto, OriginalExifResult, PhotoExifResult, PhotosService, UpdateExifDto, UpdatePhotoDto } from './photos.service';
+import { PurgeService } from './purge.service';
+import type { PurgeResult } from './purge.service';
 
 @Controller('photos')
 export class PhotosController {
-  constructor(private readonly photos: PhotosService) {}
+  constructor(
+    private readonly photos: PhotosService,
+    private readonly purgeService: PurgeService,
+  ) {}
 
   /**
    * 整份档案读取（公开）。带筛选条件时与 /search/photos 完全等价 ——
@@ -144,5 +150,29 @@ export class PhotosController {
     if (!body.ids || body.ids.length === 0) throw new BadRequestException('请先选择要处理的照片');
     const removed = await this.photos.removeBatch(body.ids);
     return { removed };
+  }
+
+  /**
+   * 彻底删除单张：清云端副本 + 本机副本 + 数据库记录，不可恢复。
+   * 与上面的 DELETE 是两回事（那条只做软删除、可由管理员恢复），因此单独一条路由。
+   * 失败时照片仍原样保留在库里，返回体里的 failures 说明卡在哪一步，可直接重试。
+   */
+  @Delete(':id/purge')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  async purge(@Param('id') id: string): Promise<PurgeResult> {
+    return this.purgeService.purge([id]);
+  }
+
+  /**
+   * 批量彻底删除：语义与单张一致，路径取字面量 'purge'（与 batch-delete 同形），
+   * 因此不会与 @Post(':id') 一类的动态段争抢匹配。
+   */
+  @Post('purge')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  async purgeBatch(@Body() body: { ids?: string[] }): Promise<PurgeResult> {
+    if (!body.ids || body.ids.length === 0) throw new BadRequestException('请先选择要彻底删除的照片');
+    return this.purgeService.purge(body.ids);
   }
 }
