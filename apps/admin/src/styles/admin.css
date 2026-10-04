@@ -146,6 +146,91 @@
 }
 
 /* --------------------------------------------------------------------------
+ * 待上传文件清单：文件夹根 → 文件，逐文件勾选、同名文件标出（UploadPlanTree）
+ * -------------------------------------------------------------------------- */
+.upload-plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.upload-plan__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 清单容器描边 + 内滚：文件数很多时外层弹窗高度保持稳定 */
+.upload-plan__tree {
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4) 0;
+}
+
+.upload-plan__foot {
+  font-size: var(--font-size-meta);
+  color: var(--color-text-secondary);
+}
+
+/* 文件夹根：名称 + 计数 + 本文件夹的快捷取消勾选 */
+.upload-plan__root {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+}
+
+.upload-plan__root-name {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-base);
+}
+
+.upload-plan__root-meta {
+  font-size: var(--font-size-meta);
+  color: var(--color-text-tertiary);
+}
+
+/* 文件行：文件名占满剩余宽度，体积与同名标识紧随其后 */
+.upload-plan__row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+}
+
+.upload-plan__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-base);
+}
+
+.upload-plan__size {
+  flex: none;
+  font-size: var(--font-size-meta);
+  color: var(--color-text-tertiary);
+}
+
+/* 文件夹拖放区：浏览器拖入目录时拿不到 webkitRelativePath，因此不用 Upload.Dragger，自备落点 */
+.upload-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-20);
+  border: 1px dashed var(--color-border-base);
+  border-radius: var(--radius-md);
+  text-align: center;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.upload-drop--active {
+  border-color: var(--color-accent);
+  background-color: var(--color-material-ultra-thin);
+}
+
+/* --------------------------------------------------------------------------
  * 彻底删除确认（PurgeConfirmModal）
  * -------------------------------------------------------------------------- */
 /* 待删除文件名清单：内滚定高，上千条时弹层高度仍然稳定 */
