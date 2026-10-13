@@ -77,6 +77,13 @@ export interface Photo {
   place: string;
   /** 拍摄日期，统一 YYYY-MM-DD，便于字符串直接切片分组 */
   date: string;
+  /**
+   * 精确拍摄时间（EXIF DateTimeOriginal），ISO-8601 字符串；早期数据可能为空。
+   * 【为什么与 date 并存】date 只到「日」，承担分组与排序；精确到秒的时间**不参与排序**，
+   * 只在查看器的拍摄信息里展示 —— 排序口径一旦精确到秒，同一天内照片的先后
+   * 会随「秒」跳动，与「同一天就是同一批」的阅读直觉不符。
+   */
+  takenAt?: string | null;
   /** 喜爱数 */
   likes: number;
   size: PhotoSize;

@@ -71,7 +71,8 @@ export function App() {
   const [search, setSearch] = useState<PhotoQuery>({});
   // 整份照片档案在顶层取一次，画廊与影集共用。
   // 首屏只取一页，滚到底由 GalleryScreen 触发 loadMore；地图要全量点位，见下面的 effect。
-  const { photos, loading, hasMore, loadingMore, error, loadMore, loadAll, refresh } = usePhotos();
+  // 排序方向一并交给它：分页取的是「按该方向排序后的前缀」，只有服务端知道全档的端点在哪儿。
+  const { photos, loading, hasMore, loadingMore, error, loadMore, loadAll, refresh } = usePhotos(filters.sort);
   // 前台登录态：admin 登录后开放前台编辑能力
   const [session, setSession] = useState<FrontSession | null>(() => currentSession());
   const admin = isFrontAdmin(session);
@@ -162,7 +163,7 @@ export function App() {
   let screen: ReactNode;
   switch (module) {
     case 'albums':
-      screen = <AlbumsScreen onOpenAlbum={openAlbum} />;
+      screen = <AlbumsScreen onOpenAlbum={openAlbum} admin={admin} />;
       break;
     case 'map':
       screen = (

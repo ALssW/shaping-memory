@@ -17,19 +17,26 @@
  * 【状态归属】当前下标由父级 GalleryScreen 持有，本组件只上报「翻页方向」与「跳到第几张」。
  * 关闭是两段式：先播退场动画，播完才回调 onClose —— 这样退出动画不会被卸载打断。
  *
- * 【画框外的两件东西】
- *   - EXIF 卡片：挂在画框右缘（窄屏下缘）之外，高度取画框高 —— 照片多高卡片就多高。
- *     它的裁切窗**紧贴画框**，卡片自己藏在窗里（位移 −100%）；就位时窗退开一格、
- *     卡片滑到位，于是「从照片右缘长出来、再缓缓离开／反向贴回去」全程都在窗内完成。
- *     卡片右下角常驻「加载原片 / 下载 / 标记喜爱」三个操作；
+ * 【画面切成左右两块】宽屏是「左图片区 + 右信息栏」的固定分栏（两者都不随照片改尺寸）：
+ *   - 左图片区（.viewer__stage）：占据屏幕左侧，宽度 = 视口宽 − 右栏宽（见 --viewer-rail），
+ *     下边止于胶片条上缘。照片在这块区域内**双向居中**（fitRect 就是按这块区域算落点的），
+ *     翻页箭头钉在它的左右边缘、垂直居中 —— 也就与照片中心同处一条水平线。
+ *     它同时是「悬浮显形」的命中区：指针落进这块区域（含照片本身，照片是它的子层），
+ *     箭头才从半透明浮到全显；指针移到右栏或胶片条上则退回半透明。
+ *   - 右信息栏：EXIF 卡片固定挂在屏幕右侧（top / right / bottom 均按视口定，宽度取自 --exif-w），
+ *     尺寸只跟视口与主题倍率有关 —— 不被照片纵横比带着变高变矮，也不跟着画框的 FLIP 位移跑，
+ *     因为它已**不是画框的子层**。就位时卡片自**视图最右侧**滑入并淡入，退场沿同一路径向右滑出并淡出；
+ *     卡片右下角常驻「加载原片 / 下载 / 标记喜爱」三个操作。
  *   - 胶片条：只摆 20 张的滑动窗口，滚轮可翻页，选中那张在整体尺寸上再放大 1.5 倍。
+ *   窄屏没有右栏：--viewer-rail 退化为 0，图片区就是整块屏幕，卡片改从屏幕底部升起并淡入（见下）。
  *
- * 【原页头 viewer__top 已按需求移除】关闭按钮单独挂在右上角，实况播放按钮移到照片右下角。
+ * 【原页头 viewer__top 已按需求移除】关闭按钮挂在**图片区**的右上角（让开右栏），
+ * 实况播放按钮移到照片右下角。
  *
- * 【照片吃满屏幕】画框的落点由 fitRect 按**整个视口**算，只扣两处：
- *   宽屏在右侧扣掉「间隙 + EXIF 卡片宽」，底部扣掉胶片条占的那一带。
- *   顶边贴视口上缘、左右铺满 —— 关闭按钮 / 翻页箭头 / EXIF 卡片都是浮在照片之上的浮层。
- *   容器 .viewer 也铺满视口，但它只是背板与「点空白处关闭」的命中区，不参与照片度量。
+ * 【照片吃满图片区】画框的落点由 fitRect 按图片区算，只扣两处：
+ *   宽屏在右侧扣掉「间隙 + EXIF 卡片宽」，底部扣掉胶片条占的那一带；
+ *   顶边贴视口上缘、左右在区内铺满 —— 关闭按钮 / 翻页箭头 / 实况按钮都浮在照片之上。
+ *   容器 .viewer 铺满视口，它只是背板与「点空白处关闭」的命中区，不参与照片度量。
  *
  * 【放大：单击定住、按住看细节、按住再拖即平移】三种手势共用一份 pan 状态 ——
  *   单击一次       → 以点击位置为中心放大到 2× 并**定住**（zoomLocked），再单击复原；
@@ -42,19 +49,26 @@
  * 变换写在 img 上而不是外层容器上：容器的布局盒因此保持不变，
  * getBoundingClientRect() 始终是未缩放的框，位移换算与边界夹取才有稳定的参照。
  *
- * 【窄屏的 EXIF 是一层抽屉】宽屏卡片挂在画框右缘；窄屏没有多余的横向空间，
+ * 【窄屏的 EXIF 是一层抽屉】宽屏卡片是屏幕右侧的固定栏位；窄屏没有多余的横向空间，
  * 于是收成一枚信息按钮 + 从屏幕底部升起的抽屉（见 app.css 的 .viewer__exifclip 窄屏段）。
- * 卡片本体只写一份 —— 宽屏与窄屏共用同一个元素（exifCard），只换挂载点与位移方向。
+ * 卡片本体只写一份 —— 宽屏与窄屏共用同一个元素（exifCard），只换挂载点与入场方向。
  *
  * 【退场时哪些元素在动】画框飞回网格 + 背板淡出 + 关闭按钮/箭头/胶片条一起淡出。
  * 后三样此前是「照片缩完、节点被卸载时才一起消失」，读起来像闪一下；
  * 现在它们跟着 leaving 走同一条淡出，与画框的飞行同时发生。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { motion } from 'motion/react';
+import type { CSSProperties } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { tokens } from '@shaping-memory/design-tokens';
 import { themeExifHeight, themeExifWidth, themeSpace } from '@shaping-memory/sdk';
-import { EXIF_SCOPE_CLASS, exifRows, formatDate, photoAspect, placeholderColors } from '@shaping-memory/core';
+import {
+  approvedTagNames,
+  EXIF_SCOPE_CLASS,
+  exifSections,
+  photoAspect,
+  placeholderColors,
+} from '@shaping-memory/core';
 import type { Photo } from '@shaping-memory/core';
 
 import { Icon } from './Icon';
@@ -65,6 +79,7 @@ import { UnlockDialog } from './UnlockDialog';
 import { useViewport } from '../hooks/useViewport';
 import { fade, springs } from '../lib/motion';
 import { cachedOriginal, isOriginalCacheable, loadOriginal } from '../lib/original-cache';
+import { scrimRaster } from '../lib/scrim-assets';
 
 /**
  * 照片可用区的留白基准（必须与 app.css 里 .viewer__stripbox 的留白一致）
@@ -87,8 +102,33 @@ const S20 = Number.parseFloat(tokens.space.s20);
 const S24 = Number.parseFloat(tokens.space.s24);
 const S64 = Number.parseFloat(tokens.space.s64);
 
-/** EXIF 卡片的挂载方向：宽屏挂在画框右缘、窄屏收成屏幕底部的抽屉（与 app.css `@media (max-width: 899px)` 同口径） */
+/** EXIF 卡片的挂载方向：宽屏挂在屏幕右侧的固定栏位、窄屏收成屏幕底部的抽屉（与 app.css `@media (max-width: 899px)` 同口径） */
 const WIDE_MIN = 900;
+
+/**
+ * 「布局视口」尺寸：fixed 定位元素的定位基准。
+ * 【为什么要单独量一次】useViewport 给的是 window.innerWidth / innerHeight —— **包含**滚动条，
+ * 而 .viewer__stage 与 .viewer__exifclip 都是 fixed 定位，固定定位以布局视口（不含滚动条）为基准，
+ * 两者相差一条滚动条的宽度（本机实测 8px）。照片若按 innerWidth 居中、图片区却按 clientWidth 定宽，
+ * 照片就会相对图片区偏出半个滚动条（4px），双向居中与箭头对齐都会跟着偏。
+ * 因此查看器里的一切**几何量**都从布局视口取，useViewport 只保留「尺寸变了要重渲染」的作用。
+ */
+function layoutViewport(): { width: number; height: number } {
+  const root = document.documentElement;
+  return { width: root.clientWidth, height: root.clientHeight };
+}
+
+/**
+ * 是否走「左图右栏」的宽屏布局：必须与 app.css 的 `@media (max-width: 899px)` **严格同口径**。
+ * 【为什么不能拿布局视口判】CSS 媒体查询的 width 在 Chrome 里是**含**滚动条的那个宽度
+ * （本机实测 innerWidth=900 / clientWidth=892 时，`max-width: 899px` 不匹配 —— 即按 900 判），
+ * 而几何量必须按不含滚动条的布局视口算。两者相差一条滚动条宽：若宽窄也用 clientWidth 判，
+ * innerWidth ∈ [900, 907] 这一档就会变成「JS 判窄屏、CSS 判宽屏」—— 右栏按宽屏摆成侧栏、
+ * 图片区却按窄屏铺满整屏，两者重叠。所以宽窄判定单独走 innerWidth。
+ */
+function isWideViewport(): boolean {
+  return window.innerWidth >= WIDE_MIN;
+}
 
 /** 胶片条一次最多摆这么多张：以当前这张为中心取窗口，而不是把整卷铺开 */
 const STRIP_SIZE = 20;
@@ -163,14 +203,19 @@ interface FrameRect {
   [axis: string]: number;
 }
 
-/** 把「按纵横比撑开的盒子」装进照片可用区并居中：这就是放大后的落点。
- *  可用区 = 整块屏幕（照片要尽可能大），只扣两处：
+/** 把「按纵横比撑开的盒子」装进左侧图片区并居中：这就是放大后的落点。
+ *  可用区（也就是 .viewer__stage 那块区域）的算法：从整块屏幕出发，只扣两处：
  *   - 宽屏在**右侧**扣掉「间隙 + EXIF 卡片宽」；窄屏的 EXIF 是浮在照片之上、
  *     从屏幕底部升起的抽屉，不参与占位，照片因此能吃满横向空间；
  *   - 底部扣掉胶片条占的那一带（胶片条固定在屏幕最底部，照片不能压住它）。
+ * 【为什么必须与 .viewer__stage 严丝合缝】箭头是按 stage 的左右边缘与垂直中线摆的，
+ *  照片也按同一块区域居中，两者的中心因此落在同一点上；若这里与 CSS 口径不一致，
+ *  箭头就会相对照片偏上/偏下。stage 的宽度由 --viewer-rail、下边由 --viewer-safe-bottom
+ *  给出，而这两个变量正是本函数用到的 reserveW 与 safeBottom（见根节点的内联样式）。
+ *  wide 由调用方按 isWideViewport() 传入（与 CSS 媒体查询同口径），不再从 viewport 现推 ——
+ *  否则本函数的宽窄判断会与 --viewer-rail 的取值分家，两者对不上。
  *  盒子按原始纵横比缩放（等价于 contain），所以照片只会整体变大变小，绝不会被拉歪。 */
-function fitRect(aspect: number, viewport: { width: number; height: number }, geom: ViewerGeom): FrameRect {
-  const wide = viewport.width >= WIDE_MIN;
+function fitRect(aspect: number, viewport: { width: number; height: number }, geom: ViewerGeom, wide: boolean): FrameRect {
   const reserveW = wide ? geom.exifGap + geom.exifW : 0;
   const availW = Math.max(1, viewport.width - reserveW);
   /* 底边 = 胶片条上缘（条高 + 距底那一格 + 一格呼吸）；顶边就是视口上缘，不再另留页头带 */
@@ -220,7 +265,10 @@ interface ViewerProps {
 
 export function Viewer({ list, index, origin, onStep, onSeek, onClose, admin, categories, onPhotosChanged, liked, onToggleLike }: ViewerProps) {
   const photo = list[index];
-  const viewport = useViewport();
+  /* useViewport 只作为「窗口尺寸变化 → 重渲染」的触发源：几何量按布局视口现算（见 layoutViewport），
+     宽窄判定另按与媒体查询同口径的 innerWidth（见 isWideViewport）。 */
+  useViewport();
+  const viewport = layoutViewport();
   /* 几何量随主题倍率现算：倍率改了（刷新页面后）这里的留白与卡片尺寸立刻跟上，
      与 app.css 的 --theme-scale 口径一致 */
   const geom = currentGeom();
@@ -301,11 +349,18 @@ export function Viewer({ list, index, origin, onStep, onSeek, onClose, admin, ca
   /** 原片下载失败的原因；成功或收起原片时清掉 */
   const [originalError, setOriginalError] = useState<string | null>(null);
   /**
+   * 背板极图：当前这张照片压成 32px PNG 后的 data URL（见 lib/scrim-assets）。
+   * null = 还没压出来（跨域被拒、图片未就绪或正在压）—— CSS 会退回中性底色，不留空。
+   */
+  const [scrimImage, setScrimImage] = useState<string | null>(null);
+  /**
    * 打开时的起点矩形。除了「从地图点位进来」这一路，它平时用不上
    * —— 但那一路上网格里没有对应的格子，退场只能飞回这里（见 requestClose）。
    */
   const originRef = useRef(origin);
   const photoId = photo?.id ?? null;
+  /** 背板要压成极图的那张图：详情档缩略图，色场只要色块的分布，不需要原片 */
+  const scrimSrc = photo?.url ?? null;
   const isLiked = photo ? liked.has(photo.id) : false;
   /**
    * 这张是否被隐私策略锁住：锁住时后端给的是**服务端生成的模糊图**，
@@ -332,8 +387,8 @@ export function Viewer({ list, index, origin, onStep, onSeek, onClose, admin, ca
     },
     [currentSrc],
   );
-  const target = fitRect(ratioW / ratioH, viewport, geom);
-  const wide = viewport.width >= WIDE_MIN;
+  const wide = isWideViewport();
+  const target = fitRect(ratioW / ratioH, viewport, geom, wide);
   /** 卡片这一帧该不该露出来：就位后才向右滑出，退场时先原路收回照片背后 */
   const cardShown = settled && !leaving;
 
@@ -579,6 +634,21 @@ export function Viewer({ list, index, origin, onStep, onSeek, onClose, admin, ca
 
   /* 换页不需要「重置加载态」了：loaded 由地址判等得出，新地址天然不等于旧地址 */
 
+  /* 换页时重压背板极图：色场必须跟着当前这张照片走，否则底与图分家、过渡就露馅。
+     先清空再压 —— 沿用上一张会让新照片的背板透着**上一张**的色彩，比短暂的中性底色更扎眼。
+     压制是异步的（要等图片解码），这期间组件可能已卸载或已翻页，用 cancelled 闸掉迟到的结果。 */
+  useEffect(() => {
+    let cancelled = false;
+    setScrimImage(null);
+    if (!scrimSrc) return undefined;
+    void scrimRaster(scrimSrc).then((next) => {
+      if (!cancelled) setScrimImage(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [scrimSrc]);
+
   /* 胶片条只摆 STRIP_SIZE 张：以当前这张为中心向前后各取一半，形成一条**滑动窗口**
      （而不是把整卷铺开）。走到列表两端时窗口被夹在边上，
      夹取后当前这张一定还在窗口里 —— 这也是下面按 index − start 取元素的前提。 */
@@ -608,6 +678,11 @@ export function Viewer({ list, index, origin, onStep, onSeek, onClose, admin, ca
    * 下载不受此限：能不能显示与能不能存盘是两回事。
    */
   const previewSrc = photo.format === 'JPG' ? photo.originalPreviewUrl ?? null : null;
+
+  /* 拍摄信息卡片的分组内容（基本信息 / 拍摄参数 / 设备信息）—— 由 core 统一给出，
+     与移动端同一份口径；标签只取「已生效」的那些（待审的低置信度猜测不该出现在访客眼前）。 */
+  const sections = exifSections(photo);
+  const tagNames = approvedTagNames(photo.tags);
 
   /**
    * 切换「原片 / 缩略图」。
@@ -641,12 +716,18 @@ export function Viewer({ list, index, origin, onStep, onSeek, onClose, admin, ca
   };
 
   /**
-   * 卡片本体的入场位移：宽屏从画框里侧滑出（x 由 -100% 到 0）；
-   * 窄屏的抽屉由**外层挂载点**整体升起，卡片自己不再位移（否则两层各滑一次，像掉帧）。
+   * 卡片的入场 / 退场：宽屏从**视图最右侧**起步 —— x = +100% 把卡片整个推到视口右缘之外，
+   * 再滑回 0，同时透明度由 0 淡到 1；退场沿同一条路径反向：向右滑出视口并淡出至完全不可见。
+   * 【为什么是 +100% 而不是原来的 -100%】卡片本就是屏幕右侧的信息栏，进出都朝右，
+   * 与它的空间位置同侧；原先向左滑出读起来像「从照片那侧长出来」，与右栏语义相悖。
+   * 【两条曲线各按 design-tokens 的模型走】位移是空间运动 → spring；透明度是非空间状态 →
+   * duration + easing。两者同一帧起跑（见 exifCard 的 transition），读起来是一次连贯的动作。
+   * 窄屏的抽屉由**外层挂载点**整体升起并淡入（见下方挂载点），卡片自己不再位移 ——
+   * 否则两层各滑一次，读起来像掉帧。
    */
   const exifAnimate = wide
-    ? { x: cardShown ? '0%' : '-100%', y: '0%' }
-    : { x: '0%', y: '0%' };
+    ? { x: cardShown ? '0%' : '100%', y: '0%', opacity: cardShown ? 1 : 0 }
+    : { x: '0%', y: '0%', opacity: 1 };
 
   /**
    * EXIF 卡片本体。宽屏挂在画框右缘的裁切窗里、窄屏作屏幕底部的抽屉 ——
@@ -659,7 +740,9 @@ export function Viewer({ list, index, origin, onStep, onSeek, onClose, admin, ca
       aria-label="拍摄信息"
       initial={false}
       animate={exifAnimate}
-      transition={springs.smooth}
+      /* 位移走 spring、透明度走 slow 档 fade（300ms）：后者贴近 400ms 的 spring，
+         不会出现「位移还在走、透明度已经走完」的断层。 */
+      transition={{ x: springs.smooth, opacity: fade('slow') }}
     >
       <header className="viewer__exifhead">
         <h2 className="viewer__exiftitle">{photo.title}</h2>
@@ -669,10 +752,6 @@ export function Viewer({ list, index, origin, onStep, onSeek, onClose, admin, ca
             <IconButton name="arrowDown" label="收起拍摄信息" onClick={() => setExifOpen(false)} />
           </span>
         )}
-        <p className="viewer__exifmeta">
-          {photo.cat} · {formatDate(photo.date)}
-        </p>
-        <p className="viewer__exifmeta">{photo.place}</p>
       </header>
 
       {/* 照片描述：手写正文，紧跟标题摘要、排在拍摄信息表之前。
@@ -687,12 +766,44 @@ export function Viewer({ list, index, origin, onStep, onSeek, onClose, admin, ca
           空地图比没有地图更容易造成困惑。 */}
       {photo.gps ? <PhotoMiniMap gps={photo.gps} title={photo.title} /> : null}
 
-      {exifRows(photo).map(([key, value]) => (
-        <div className="exif-row" key={key}>
-          <span className="exif-row__k">{key}</span>
-          <span className="exif-row__v">{value}</span>
-        </div>
+      {/* 拍摄信息：按「基本信息 / 拍摄参数 / 设备信息」分三组。
+          拍摄参数一组顶部是四枚「图标 + 值」标签（焦距 / 光圈 / 快门 / ISO），一行排开；
+          其余字段仍是「标签 → 值」行。分组与顺序由 core 的 exifSections 统一给出。 */}
+      {sections.map((section) => (
+        <section className="exif-sec" key={section.title}>
+          <h3 className="exif-sec__title">{section.title}</h3>
+          {section.chips.length > 0 ? (
+            <div className="exif-chips">
+              {section.chips.map((chip) => (
+                <span className="exif-chip" key={chip.icon}>
+                  <Icon name={chip.icon} className="exif-chip__icon" />
+                  <span className="exif-chip__v">{chip.value}</span>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {section.rows.map(([key, value]) => (
+            <div className="exif-row" key={key}>
+              <span className="exif-row__k">{key}</span>
+              <span className="exif-row__v">{value}</span>
+            </div>
+          ))}
+        </section>
       ))}
+
+      {/* 标签单独一组、以胶囊排开（与参考图的「标签」区块同形）；没有已生效标签就不出现 */}
+      {tagNames.length > 0 ? (
+        <section className="exif-sec">
+          <h3 className="exif-sec__title">标签</h3>
+          <div className="exif-tags">
+            {tagNames.map((name) => (
+              <span className="exif-tag" key={name}>
+                {name}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* 卡片右下角的操作区：原页头里的下载与点赞迁到这里。
           sticky bottom 让它常驻卡片右下角 —— 表格很长时不用滚到底才能点到。
@@ -747,17 +858,50 @@ export function Viewer({ list, index, origin, onStep, onSeek, onClose, admin, ca
       role="dialog"
       aria-modal="true"
       aria-label={`${photo.title} 全屏预览`}
+      /* 两个布局量以 CSS 变量下发，让 CSS 与上面的 fitRect 共用同一份口径（免得两处各写一遍、
+         改一边忘一边）：--viewer-rail = 右侧让给 EXIF 栏的宽度（窄屏为 0，即完全不占位）；
+         --viewer-safe-bottom = 底部让给胶片条的那一带。两者正是 fitRect 用到的 reserveW 与 safeBottom。 */
+      style={
+        {
+          '--viewer-rail': `${wide ? geom.exifW + geom.exifGap : 0}px`,
+          '--viewer-safe-bottom': `${geom.safeBottom}px`,
+        } as CSSProperties
+      }
       /* 点照片以外的任何地方 → 反向动画缩回网格原位 */
       onClick={requestClose}
     >
-      {/* 背板单独一层淡出：照片飞回网格的途中背板先退场，画面才连贯。
+      {/* 背板：中性底 + 极图（放大出色彩分布、高斯模糊抹平采样块）+ 压暗材质三层
+          （见 app.css 的 .viewer__scrim）。柔和色场由「32px 极图被 cover 拉满
+          『视口 + 2×模糊半径』的盒子并居中」放大得到，再压一档高斯模糊抹平放大在各采样块
+          边界残留的转折线；盒子溢出视口的那圈正是模糊的衰减区，交给背板裁掉，
+          视口四边因此不会露出半透明的暗边（详见 lib/scrim-assets 的文件头）。
+          换页时极图**交叉溶解**（AnimatePresence mode="sync" + 按照片 id 换 key）：
+          旧的一张淡出与新的一张淡入同帧发生，中间始终有画面，不会空一拍。
+          素材源取 photo.url（缩略图）而非当前预览源：切换「加载原片」时背板不会跟着闪变；
+          锁定照片拿到的本就是服务端给的模糊图，压成极图没有任何额外暴露风险。
           initial={false}：挂载时直接取 animate 的值（不播动画），避免与下面 rAF 驱动的进入重复 */}
-      <motion.span
+      <motion.div
         className="viewer__scrim"
         initial={false}
         animate={{ opacity: leaving ? 0 : 1 }}
         transition={fade()}
-      />
+      >
+        <AnimatePresence mode="sync">
+          {scrimImage && (
+            <motion.img
+              key={photoId ?? 'none'}
+              className="viewer__scrimblur"
+              src={scrimImage}
+              alt=""
+              aria-hidden="true"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={fade()}
+            />
+          )}
+        </AnimatePresence>
+      </motion.div>
 
       {/* 关闭按钮：原 viewer__top（顶部带渐变纱幕的页头条）已按需求移除，关闭按钮单独挂在右上角，
           仍随退场一起淡出。原页头里的其余按钮已分散：实况播放→画框右下角、下载/点赞→EXIF 卡片右下角。 */}
@@ -790,144 +934,154 @@ export function Viewer({ list, index, origin, onStep, onSeek, onClose, admin, ca
         </motion.div>
       )}
 
-      {/* 画框：left/top/width/height 四项补间，两端矩形都是算出来的，进出场因此完全对称 */}
-      <motion.div
-        className="viewer__frame"
-        initial={false}
-        animate={rect}
-        transition={springs.smooth}
-        onAnimationComplete={() => {
-          if (leaving) onClose();
-        }}
-      >
-        {loaded ? null : (
-          <span className="viewer__placeholder" style={{ backgroundImage: `linear-gradient(135deg, ${colors[0]}, ${colors[1]})` }} />
-        )}
-
-        {/* 缩放层：自己带 overflow:hidden 把放大后的画面裁在画框内 —— 画框本身是 overflow:visible
-            （宽屏时右侧的 EXIF 卡片挂在框外），不能直接给 img 加缩放，否则放大后画面会溢到框外。
-            下面三个指针事件就是全部手势：单击定住 2×（再单击复原）、按住看细节（松手复原）、
-            按住再拖即平移 —— 三条路怎么分叉见三个处理函数的注释。
-            变换落在内部的 img 上（见下方 style），容器始终保持未缩放的布局盒。 */}
-        <div
-          className={`viewer__zoom${pan ? ' is-zoomed' : ''}${dragging ? ' is-dragging' : ''}`}
-          /* 这一层是「放大 / 平移」的命中区，拖曳由自定义指针事件实现，
-             必须关掉浏览器原生的图片拖拽 —— 否则按住拖的第一下会被浏览器先吃掉，
-             变成拖照片幽灵而不是平移画面。 */
-          draggable={false}
-          onClick={stop}
-          onPointerDown={onZoomPointerDown}
-          onPointerMove={onZoomPointerMove}
-          onPointerUp={endZoomDrag}
-          onPointerCancel={endZoomDrag}
+      {/* 左侧图片展示区：占据屏幕左侧那一块（宽屏在右边给 EXIF 栏让位，栏宽见 --viewer-rail）。
+          它只承担两件事：一是「悬浮显形」的命中区 —— 指针落进这块区域（含照片本身，
+          照片是它的子层）箭头才完全显形；二是给箭头一个坐标系 —— 箭头的左右边缘与垂直中心
+          都按它算，因此始终贴着图片区的边、与照片中心同一水平线。
+          它是 fixed 空壳、不带 transform：画框因此仍是相对视口的 fixed 定位，FLIP 的矩形换算不受影响。
+          它自己不带点击处理 —— 点空白处关闭仍照旧冒泡到最外层 .viewer 的 requestClose。 */}
+      <div className="viewer__stage">
+        {/* 画框：left/top/width/height 四项补间，两端矩形都是算出来的，进出场因此完全对称 */}
+        <motion.div
+          className="viewer__frame"
+          initial={false}
+          animate={rect}
+          transition={springs.smooth}
+          onAnimationComplete={() => {
+            if (leaving) onClose();
+          }}
         >
-          <img
-            ref={catchCached}
-            className={`viewer__img${loaded ? ' is-loaded' : ''}`}
-            src={currentSrc ?? photo.url}
-            alt={photo.title}
-            decoding="async"
+          {loaded ? null : (
+            <span className="viewer__placeholder" style={{ backgroundImage: `linear-gradient(135deg, ${colors[0]}, ${colors[1]})` }} />
+          )}
+
+        {/* 缩放层：自己带 overflow:hidden 把放大后的画面裁在画框内 —— 画框本身不裁剪
+              （EXIF 卡片是屏幕右侧的独立栏位，不在框内），但也不能直接给 img 加缩放，
+              否则放大后画面会溢到框外。
+              下面三个指针事件就是全部手势：单击定住 2×（再单击复原）、按住看细节（松手复原）、
+              按住再拖即平移 —— 三条路怎么分叉见三个处理函数的注释。
+              变换落在内部的 img 上（见下方 style），容器始终保持未缩放的布局盒。 */}
+          <div
+            className={`viewer__zoom${pan ? ' is-zoomed' : ''}${dragging ? ' is-dragging' : ''}`}
+            /* 这一层是「放大 / 平移」的命中区，拖曳由自定义指针事件实现，
+               必须关掉浏览器原生的图片拖拽 —— 否则按住拖的第一下会被浏览器先吃掉，
+               变成拖照片幽灵而不是平移画面。 */
             draggable={false}
-            onLoad={() => setLoadedSrc(currentSrc)}
-            /* 拖曳中必须关掉补间，否则画面会「追」着指针走、明显滞后；
-               放大 / 缩小的那一次切换则交给 CSS 里的 260ms 补间。
-               translate 写在 scale 之前：位移因此以画框像素为单位，与指针位移 1:1 对应。 */
-            style={
-              pan
-                ? {
-                    transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${ZOOM_SCALE})`,
-                    transition: dragging ? 'none' : undefined,
-                  }
-                : undefined
-            }
-          />
-        </div>
-
-        {/* 实况视频：点了播放按钮才挂上来（卸载即停播，不需要额外暂停逻辑），
-            叠在照片之上但盖不住照片本身 —— 内嵌轨的比例与照片接近，contain 后正好铺满画框 */}
-        {liveOn && photo.liveUrl ? (
-          <video
-            className="viewer__live"
-            src={photo.liveUrl}
-            autoPlay
-            muted
-            loop
-            playsInline
             onClick={stop}
-          />
-        ) : null}
-        {loaded ? null : <span className="viewer__spinner" aria-hidden="true" />}
-
-        {/* 实况播放按钮：按需求移到照片右下角（原在页头）。只在这张确实有内嵌视频时出现。
-            它是主动交互控件，必须自己拦冒泡，否则点它会触发缩放层的 toggleZoom。 */}
-        {photo.isLive && photo.liveUrl && !locked ? (
-          <div className="viewer__livebtn" onClick={stop}>
-            <IconButton
-              name={liveOn ? 'pause' : 'play'}
-              label={liveOn ? '结束实况播放' : '播放实况'}
-              active={liveOn}
-              onClick={() => setLiveOn((on) => !on)}
+            onPointerDown={onZoomPointerDown}
+            onPointerMove={onZoomPointerMove}
+            onPointerUp={endZoomDrag}
+            onPointerCancel={endZoomDrag}
+          >
+            <img
+              ref={catchCached}
+              className={`viewer__img${loaded ? ' is-loaded' : ''}`}
+              src={currentSrc ?? photo.url}
+              alt={photo.title}
+              decoding="async"
+              draggable={false}
+              onLoad={() => setLoadedSrc(currentSrc)}
+              /* 拖曳中必须关掉补间，否则画面会「追」着指针走、明显滞后；
+                 放大 / 缩小的那一次切换则交给 CSS 里的 260ms 补间。
+                 translate 写在 scale 之前：位移因此以画框像素为单位，与指针位移 1:1 对应。 */
+              style={
+                pan
+                  ? {
+                      transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${ZOOM_SCALE})`,
+                      transition: dragging ? 'none' : undefined,
+                    }
+                  : undefined
+              }
             />
           </div>
-        ) : null}
 
-        {/* 锁面板：压在（服务端给的）模糊图之上，把「为什么看不清」明确说明，
-            并给出唯一一条出路 —— 输入密码。锁着时这里不显示任何原图元素。 */}
-        {locked ? (
-          <div className="viewer__lock" onClick={stop}>
-            <span className="viewer__lockicon">
-              <Icon name="lock" />
-            </span>
-            <p className="viewer__locktext">这张照片已设为隐私，需要授权后查看</p>
-            <button type="button" className="viewer__lockbtn" onClick={() => setUnlockOpen(true)}>
-              输入密码解锁
-            </button>
-          </div>
-        ) : null}
+          {/* 实况视频：点了播放按钮才挂上来（卸载即停播，不需要额外暂停逻辑），
+              叠在照片之上但盖不住照片本身 —— 内嵌轨的比例与照片接近，contain 后正好铺满画框 */}
+          {liveOn && photo.liveUrl ? (
+            <video
+              className="viewer__live"
+              src={photo.liveUrl}
+              autoPlay
+              muted
+              loop
+              playsInline
+              onClick={stop}
+            />
+          ) : null}
+          {loaded ? null : <span className="viewer__spinner" aria-hidden="true" />}
 
-        {/* 宽屏：EXIF 卡片挂在画框右缘，两层同时在动 —— 合成的观感是「卡片从照片右缘长出来 / 贴回照片」：
-            裁切窗从紧贴画框（0）退开到一格间隙（EXIF_GAP），卡片自己从 −100% 滑到 0。
-            窗口始终贴着照片那一侧，因此中途露出的只是窗口里的一条，
-            不会在照片旁边留下半截黑条、也不会飘到别的照片上去。
-            窄屏不在这里 —— 卡片要收成屏幕底部的抽屉，挂载点必须在画框之外（见画框之后那段）。 */}
-        {wide ? (
-          <motion.div
-            className="viewer__exifclip"
-            onClick={stop}
-            initial={false}
-            animate={{ x: cardShown ? geom.exifGap : 0, y: 0 }}
-            transition={springs.smooth}
-          >
-            {exifCard}
-          </motion.div>
-        ) : null}
-      </motion.div>
+          {/* 实况播放按钮：按需求移到照片右下角（原在页头）。只在这张确实有内嵌视频时出现。
+              它是主动交互控件，必须自己拦冒泡，否则点它会触发缩放层的手势。 */}
+          {photo.isLive && photo.liveUrl && !locked ? (
+            <div className="viewer__livebtn" onClick={stop}>
+              <IconButton
+                name={liveOn ? 'pause' : 'play'}
+                label={liveOn ? '结束实况播放' : '播放实况'}
+                active={liveOn}
+                onClick={() => setLiveOn((on) => !on)}
+              />
+            </div>
+          ) : null}
+
+          {/* 锁面板：压在（服务端给的）模糊图之上，把「为什么看不清」明确说明，
+              并给出唯一一条出路 —— 输入密码。锁着时这里不显示任何原图元素。 */}
+          {locked ? (
+            <div className="viewer__lock" onClick={stop}>
+              <span className="viewer__lockicon">
+                <Icon name="lock" />
+              </span>
+              <p className="viewer__locktext">这张照片已设为隐私，需要授权后查看</p>
+              <button type="button" className="viewer__lockbtn" onClick={() => setUnlockOpen(true)}>
+                输入密码解锁
+              </button>
+            </div>
+          ) : null}
+        </motion.div>
+
+        {/* 翻页箭头：钉在左侧图片区的左右边缘、垂直居中（图片区下边止于胶片条上缘，
+            所以这个「垂直居中」正好与照片中心对齐）。容器自身不吃指针事件，
+            只有两枚按钮可点 —— 于是照片区上的缩放 / 平移手势不会被这条横带截胡。
+            显隐由 CSS 负责：默认半透明，指针落进图片区（.viewer__stage:hover）才浮到全显。 */}
+        <motion.div
+          className="viewer__arrows"
+          onClick={stop}
+          initial={false}
+          animate={{ opacity: leaving ? 0 : 1 }}
+          transition={fade()}
+        >
+          <IconButton name="arrowLeft" label="上一张" onClick={() => onStep(-1)} />
+          <IconButton name="arrowRight" label="下一张" onClick={() => onStep(1)} />
+        </motion.div>
+      </div>
+
+      {/* 宽屏的信息栏：卡片固定挂在屏幕右侧（top / right / bottom 与宽度全部由 CSS 按视口定，
+          与照片的纵横比、画框的位移都无关 —— 因此它不会随翻页变高变矮、也不会跟着放大动画平移）。
+          裁切窗只负责一件事：把卡片推到视口右缘之外的那一段裁掉 —— 卡片自屏幕最右侧滑入
+          （x: +100% → 0）并同步淡入，退场沿同一路径向右滑出并淡出，途中不会在照片旁留下半截卡片。
+          窄屏不在这里 —— 卡片要收成屏幕底部的抽屉，那个挂载点必须在图片区之外（见本段之后）。 */}
+      {wide ? (
+        <div className="viewer__exifclip" onClick={stop}>
+          {exifCard}
+        </div>
+      ) : null}
 
       {/* 窄屏：EXIF 收成从屏幕底部升起的抽屉，默认收起、点左上角的信息按钮展开。
-          挂载点必须在画框**之外**：画框带着 FLIP 位移，抽屉若挂在它里面会跟着照片一起跑。
-          抽屉自己 fixed 到视口底部（与胶片条同一层），放在这个不含 transform 的容器下最稳。 */}
+          挂载点必须在图片区**之外**：图片区挂着会飞的画框，抽屉若挂在它里面会跟着照片一起跑。
+          抽屉自己 fixed 到视口底部（与胶片条同一层），放在这个不含 transform 的容器下最稳。
+          动画与外层宽屏同源：升起是空间位移（spring），另叠一层透明度淡入淡出（fade），
+          两头节奏与宽屏的卡片一致 —— 手机上没有横向余量，所以位移方向保留「由下而上」，
+          只把「淡入淡出」这一半对齐。 */}
       {wide ? null : (
         <motion.div
           className="viewer__exifclip viewer__exifclip--drawer"
           onClick={stop}
           initial={false}
-          animate={{ y: cardShown && exifOpen ? '0%' : '100%' }}
-          transition={springs.smooth}
+          animate={{ y: cardShown && exifOpen ? '0%' : '100%', opacity: cardShown && exifOpen ? 1 : 0 }}
+          transition={{ y: springs.smooth, opacity: fade('slow') }}
         >
           {exifCard}
         </motion.div>
       )}
-
-      <motion.div
-        className="viewer__arrows"
-        onClick={stop}
-        initial={false}
-        animate={{ opacity: leaving ? 0 : 1 }}
-        transition={fade()}
-      >
-        <IconButton name="arrowLeft" label="上一张" onClick={() => onStep(-1)} />
-        <IconButton name="arrowRight" label="下一张" onClick={() => onStep(1)} />
-      </motion.div>
 
       {/* 底部横向缩略图导航条：把「曝光滑杆」换成缩略图（参考 Motion 的 iOS slider 示例）。
           滚轮在这条上翻页（见上方 wheel 监听），横向滑仍用来浏览缩略图本身。 */}

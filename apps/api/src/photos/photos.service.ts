@@ -59,7 +59,14 @@ export interface ApiPhoto {
   temp: string;
   wb: string;
   place: string;
+  /** 拍摄日期（仅到「日」，YYYY-MM-DD）：分组与排序的唯一口径 */
   date: string;
+  /**
+   * 精确拍摄时间（EXIF DateTimeOriginal），ISO-8601 字符串；库里没有则 null。
+   * 【与 date 的分工】date 到「日」、承担排序；本字段到「秒」、**不参与排序**，
+   * 只在查看器的拍摄信息里展示（排序口径精确到秒会让同一天内照片的先后随秒跳动）。
+   */
+  takenAt: string | null;
   likes: number;
   size: 'landscape' | 'portrait';
   url: string;
@@ -148,6 +155,13 @@ type Row = {
   category: string;
   format: string;
   captureAt: string | null;
+  /**
+   * 精确拍摄时间。
+   * 【类型与运行时的差异】drizzle 把 timestamptz 声明为 Date，但 node-postgres 驱动
+   * 把该类型的 pg 解析器改成原文透传，运行时拿到的其实是 "2025-10-02 05:47:38+00" 字符串；
+   * 两种形态都交给 isoInstant 归一，因此这里按声明类型写 Date。
+   */
+  takenAt: Date | string | null;
   orientation: string;
   likes: number;
   liveVideoPath: string | null;
@@ -186,6 +200,7 @@ const PHOTO_COLUMNS = {
   category: media.category,
   format: media.format,
   captureAt: media.captureAt,
+  takenAt: media.takenAt,
   orientation: media.orientation,
   likes: media.likes,
   liveVideoPath: media.liveVideoPath,
@@ -215,6 +230,18 @@ function toGps(lat: number | null, lon: number | null, alt: number | null): ApiP
 }
 
 const placeholder = (value: string | null | undefined): string => value ?? '';
+
+/**
+ * 拍摄时间（Date 或库内原文）→ ISO-8601 字符串；缺值给 null。
+ * 【为什么两种形态都要收】drizzle 把 timestamptz 声明为 Date，而 node-postgres 驱动
+ * 把该类型的 pg 解析器改成了原文透传 —— 拿到的是 "2025-10-02 05:47:38+00" 这种非标准形态。
+ * 前端按浏览器本地时区渲染时必须先有一个确定的绝对时刻，因此两种输入都在这里归一为标准 ISO。
+ */
+function isoInstant(raw: Date | string | null): string | null {
+  if (!raw) return null;
+  const parsed = raw instanceof Date ? raw : new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
 
 /**
  * 从全量 EXIF 里取出定位。
@@ -740,6 +767,8 @@ export class PhotosService {
       wb: locked ? '' : placeholder(row.wb),
       place: locked ? '' : placeholder(row.place),
       date: placeholder(row.captureAt),
+      // 精确到秒的拍摄时间与 EXIF 同一档：锁定照片不出口，无权者拿不到原片时间线
+      takenAt: locked ? null : isoInstant(row.takenAt),
       likes: row.likes,
       size: row.orientation === 'portrait' ? 'portrait' : 'landscape',
       url: file('thumbnail'),

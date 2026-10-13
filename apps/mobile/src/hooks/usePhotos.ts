@@ -9,10 +9,15 @@
  *
  * 【错误口径】首屏失败记在 error 上（列表会呈现整块错误态）；
  * 追加失败也记在 error 上，但**保留已取回的照片**，用户可以直接重试而不必从头再拉。
+ *
+ * 【为什么排序方向必须交给服务端】分页取的是「按当前方向排序后的前缀」：
+ * 若恒按默认倒序取第一页、再在本地重排，正序看到的就只是「最新的那一页倒过来」，
+ * 全档最旧的照片永远进不了视野（实测正序顶部停在某年 8 月，而档案最早是 2024-10）。
+ * 因此 sort 一变就按新方向重取第一页，续页与整档取回也都沿用同一方向。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { photoApi } from '@shaping-memory/sdk';
-import type { Photo } from '@shaping-memory/core';
+import type { Photo, SortOrder } from '@shaping-memory/core';
 
 /** 单页条数：手机上首屏可见不到十张，60 张足够填满几屏，翻页也不会太碎 */
 const PAGE_SIZE = 60;
@@ -56,7 +61,7 @@ interface PageState {
 
 const EMPTY: PageState = { photos: [], loading: true, loadingMore: false, error: null, hasMore: false };
 
-export function usePhotos(): PhotosState {
+export function usePhotos(sort: SortOrder): PhotosState {
   const [state, setState] = useState<PageState>(EMPTY);
   // 手动刷新（编辑保存后重拉）
   const [refreshTick, setRefreshTick] = useState(0);
@@ -69,8 +74,12 @@ export function usePhotos(): PhotosState {
   const hasMoreRef = useRef(false);
   /** 代次：刷新后旧响应必须作废，否则慢回来的上一页会污染当前列表 */
   const generationRef = useRef(0);
+  /* 排序方向的同步副本：loadMore / loadAll 是稳定回调，若把 sort 放进依赖，
+     回调引用一变，墙面的滚动监听就会被反复重建 —— 因此与代次同一套「ref 读取」口径。 */
+  const sortRef = useRef(sort);
+  sortRef.current = sort;
 
-  /** 首屏/重取：刷新计数一变就回到第一页 */
+  /** 首屏/重取：刷新计数或排序方向一变就按新方向回到第一页 */
   useEffect(() => {
     const generation = ++generationRef.current;
     busyRef.current = true;
@@ -78,7 +87,7 @@ export function usePhotos(): PhotosState {
     hasMoreRef.current = false;
     setState((prev) => ({ ...prev, loading: true, error: null }));
     photoApi
-      .list({}, { limit: PAGE_SIZE })
+      .list({ sort }, { limit: PAGE_SIZE })
       .then((photos) => {
         if (generation !== generationRef.current) return;
         offsetRef.current = photos.length;
@@ -93,9 +102,9 @@ export function usePhotos(): PhotosState {
         // 只有「当前代次」才解锁闸门：旧请求结束得再晚，也不能替新请求放行
         if (generation === generationRef.current) busyRef.current = false;
       });
-  }, [refreshTick]);
+  }, [refreshTick, sort]);
 
-  /** 追加下一页：偏移量取「已取回条数」，结果按 id 去重后接到列表尾部 */
+  /** 追加下一页：偏移量取「已取回条数」，方向沿用当前排序，结果按 id 去重后接到列表尾部 */
   const loadMore = useCallback(() => {
     if (busyRef.current || !hasMoreRef.current) return;
     const generation = generationRef.current;
@@ -103,7 +112,7 @@ export function usePhotos(): PhotosState {
     busyRef.current = true;
     setState((prev) => ({ ...prev, loadingMore: true, error: null }));
     photoApi
-      .list({}, { limit: PAGE_SIZE, offset })
+      .list({ sort: sortRef.current }, { limit: PAGE_SIZE, offset })
       .then((photos) => {
         if (generation !== generationRef.current) return;
         offsetRef.current = offset + photos.length;
@@ -134,7 +143,7 @@ export function usePhotos(): PhotosState {
     busyRef.current = true;
     setState((prev) => ({ ...prev, loading: prev.photos.length === 0, error: null }));
     photoApi
-      .list()
+      .list({ sort: sortRef.current })
       .then((photos) => {
         if (generation !== generationRef.current) return;
         offsetRef.current = photos.length;

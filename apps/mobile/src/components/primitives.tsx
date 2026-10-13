@@ -48,6 +48,9 @@ export type IconName =
   | 'arrowDown'
   | 'save'
   | 'sliders'
+  | 'plus'
+  | 'trash'
+  | 'share'
   | 'pin';
 
 type FeatherName = ComponentProps<typeof Feather>['name'];
@@ -84,6 +87,10 @@ const GLYPHS: Record<Exclude<IconName, 'heartFilled'>, FeatherName> = {
   save: 'save',
   /* 面板型工具（EXIF 编辑）的图标：与 PanelToolDef.icon 同名，两端各自按名实现 */
   sliders: 'sliders',
+  /* 相册分组管理：新建分组 / 删除分组 / 分享相册 */
+  plus: 'plus',
+  trash: 'trash-2',
+  share: 'share-2',
   /* 拍摄地点：与 Web 的 Icon name="pin" 同一枚（地图针脚），地点字段两端同形 */
   pin: 'map-pin',
 };

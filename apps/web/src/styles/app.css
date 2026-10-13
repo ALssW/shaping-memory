@@ -1523,25 +1523,92 @@ html {
      免得有人看到裸数值又去「归整」。整条胶片条的尺寸都由它派生：
      外圈外扩、内边距、条高，以及 Viewer.tsx 里用来算底部让位带的 stripH。 */
   --strip-dot: calc((var(--space-64) + var(--space-4)) / 1.5);
+  /* 左右分栏的两个量：都由 Viewer.tsx 现算后以内联样式下发，与 fitRect 共用同一份口径。
+     --viewer-rail        左侧图片区右边要让出的宽度 = EXIF 卡宽 + 一格间隙（窄屏为 0）
+     --viewer-safe-bottom 底部让给胶片条的那一带（图片区与右栏的下边界都止于此）
+     这里只留兜底值：变量缺席时（例如样式被单独引用）栏位仍有可用的宽与底边，不会塌成 0 高。 */
+  --viewer-rail: 0px;
+  --viewer-safe-bottom: 0px;
+  /* EXIF 卡片与右栏的尺寸口径：与 sdk 的 themeExifWidth() / themeExifHeight() 一一对应。
+     【为什么写死 256 / 128 而不是 --space-64 * 4】--space-64 已被全局倍率放大过，
+     再乘一次专区倍率就成了双重放大（1.15 × 1.4），卡片会宽到挤压照片。
+     这里要的是「以基准尺寸为起点、只随专区倍率走」，因此用字面量。 */
+  --exif-w: calc(256px * var(--theme-exif-scale));
+  --exif-h: calc(128px * var(--theme-exif-scale));
 }
 
-/* 背板单独成层：它只负责「压暗 + 模糊」。
+/* 左侧图片展示区：一块 fixed 空壳，占据屏幕左侧（宽屏扣掉右栏，见 --viewer-rail），
+   下边止于胶片条上缘。它有两个身份：
+     1) 照片的居中容器 —— Viewer.tsx 的 fitRect 就是按这块区域的宽高算照片落点的，
+        所以照片在区内水平、垂直双向居中；
+     2) 「悬浮显形」的命中区 —— 指针落进这块区域（含照片本身，照片是它的子层）时，
+        翻页箭头才从半透明浮到全显（见 .viewer__arrows）。
+   它不带 transform，画框因此仍是相对视口的 fixed 定位；也不拦点击 ——
+   点空白处关闭照旧冒泡到最外层的 .viewer。 */
+.viewer__stage {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: var(--viewer-rail);
+  bottom: var(--viewer-safe-bottom);
+}
+
+/* 背板：中性底 + 极图（放大出色彩分布 + 高斯模糊抹平采样块）+ 薄压暗材质，
+   三层结构见 Viewer.tsx 的 .viewer__scrim。
+   照片本身仍是画面上唯一的「图像」：背板铺的是一张长边 32px 的极图，
+   它被 cover 放大到「视口 + 2×模糊半径」的盒子上、再过一档高斯模糊后，
+   只剩平滑的色场，看不出任何可辨认的细节（见 lib/scrim-assets 的文件头）。
    与照片画框分成两层，是为了让照片飞回网格的途中背板可以先退场 ——
    若把背板的不透明度放在最外层容器上，画框会被一起淡掉。
    fixed 铺满整屏：容器与视口同尺寸，但背板仍独立成层，便于单独淡出。 */
 .viewer__scrim {
   position: fixed;
   inset: 0;
-  background: var(--color-material-opaque);
-  backdrop-filter: blur(var(--blur-sm));
+  /* 中性底：极图未就绪 / 压制失败时的场地，也让换页的交叉溶解有一个稳定的背景 ——
+     取全局唯一背景色，不参与「照片配色」，因此不会在新旧两张之间串色。 */
+  background: var(--color-background);
+  /* 裁掉落到底图盒子外的那部分：模糊会让底图的外缘向外淡出约两倍模糊半径，
+     所以底图要撑到视口之外（见下一条），再把视口之外的那圈裁掉 ——
+     被裁掉的正是衰减区，视口四边留下的全是实心像素，不会露出一圈半透明的暗边。 */
+  overflow: hidden;
+}
+
+/* 底图：32px 的极图被 cover 拉满「视口 + 2×模糊半径」的盒子，再压一档高斯模糊 ——
+   柔和的色场由这次**放大**与这次**模糊**共同得到。
+   【明确尺寸 + 居中】容器（.viewer__scrim）正是视口本身，于是左上角各退两个模糊半径、
+   尺寸写成「100% + 4×模糊半径」的显式值，盒子就关于视口中心对称、四边各溢出两个模糊半径。
+   【为什么不用 translate(-50%,-50%)】本元素是 motion.img，opacity 由 Motion 以内联样式
+   驱动；位移若也写成 transform，两者会争同一个属性 —— 改用 margin 让位，互不干扰。
+   【object-fit: cover】等比放大到铺满盒子、超出部分裁掉；换成 fill 会把画面比例拉歪。
+   【为什么溢出量取两个模糊半径】高斯衰减在距边缘两倍半径处的残留不足 3%，裁到那里已经看不出边。 */
+.viewer__scrimblur {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(100% + var(--blur-xxxl) * 4);
+  height: calc(100% + var(--blur-xxxl) * 4);
+  margin: calc(var(--blur-xxxl) * -2);
+  object-fit: cover;
+  filter: blur(var(--blur-xxxl));
+}
+
+/* 压暗材质：必须压在极图**之上**（::after 是三层的最后一层，因此排在 .viewer__scrimblur 之后绘制）。
+   取薄档（35%）：极图已经自带一层偏暗的色，再压深一档就只剩灰、色场被抹平；
+   薄档足以让其上的文字与控件（关闭 / 箭头 / EXIF 卡片）在任意亮度的色场上保持可读。 */
+.viewer__scrim::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--color-material-thin);
 }
 
 /* 关闭按钮：原 viewer__top（顶部整条页头 + 暗色渐变纱幕）已移除，
-   只把关闭这一枚留在右上角。不再有铺满整行的背景条，因此不需要 ::before 纱幕 ——
-   按钮自己带材质（见 .icon-btn），压在照片上仍可读。 */
+   只把关闭这一枚留在**图片区**的右上角（让开右侧的 EXIF 栏，免得住卡片标题上压）。
+   窄屏没有右栏（--viewer-rail 为 0），它就仍是屏幕右上角。不再有铺满整行的背景条，
+   因此不需要 ::before 纱幕 —— 按钮自己带材质（见 .icon-btn），压在照片上仍可读。 */
 .viewer__close {
   position: absolute;
-  right: var(--space-8);
+  right: calc(var(--viewer-rail) + var(--space-8));
   top: var(--space-8);
   z-index: var(--z-inset-chrome);
 }
@@ -1555,30 +1622,20 @@ html {
   z-index: var(--z-inset-chrome);
 }
 
-/* 照片画框：位置与尺寸由 Motion 在「网格矩形 ↔ 安全区矩形」之间补间（见 Viewer.tsx）。
+/* 照片画框：位置与尺寸由 Motion 在「网格矩形 ↔ 图片区矩形」之间补间（见 Viewer.tsx）。
    因此这里只声明它是 fixed，不写任何尺寸。
-   overflow 必须是 visible：右侧的 EXIF 卡片挂在画框右缘之外，
-   它是画框的框外之物 —— 裁掉就看不见了。照片本体铺满画框（见 .viewer__img），
-   两端矩形的纵横比一致，因此不存在需要裁掉的溢出画面。 */
+   不裁剪：放大后的画面由 .viewer__zoom 自己裁在框内，而框内也没有需要藏在框外的元素
+   （EXIF 卡片已改为屏幕右侧的独立栏位，不再是画框的框外之物）。 */
 .viewer__frame {
   position: fixed;
   overflow: visible;
-  /* EXIF 卡片的两个尺寸：与 sdk 的 themeExifWidth() / themeExifHeight() 一一对应；
-     宽屏时 fitRect 按 **--exif-w** 在右侧给照片让位（卡片高度取画框高，不需要单独读数）。
-     卡片离照片的那道间隙不在这里 —— 它是**动画的一部分**（见 .viewer__exifclip）。
-
-     【为什么写死 256 / 128 而不是 --space-64 * 4】--space-64 已被全局倍率放大过，
-     再乘一次专区倍率就成了双重放大（1.15 × 1.4），卡片会宽到挤压照片。
-     这里要的是「以基准尺寸为起点、只随专区倍率走」，因此用字面量。 */
-  --exif-w: calc(256px * var(--theme-exif-scale));
-  --exif-h: calc(128px * var(--theme-exif-scale));
   /* 与网格里的照片同一套语言：照片不带圆角，放大后也不带 */
   z-index: var(--z-inset-decoration);
   box-shadow: 0 40px 90px rgba(0, 0, 0, 0.6);
 }
 
 /* 缩放层：把照片包在里面，自己 overflow:hidden 把放大后的画面裁在画框内。
-   画框本身是 overflow:visible（右侧 EXIF 卡片挂在框外），所以裁切必须落在这一层。 */
+   画框本身不裁剪（EXIF 卡片已是屏幕右侧的独立栏位，不在框内），但裁切仍必须落在这一层。 */
 .viewer__zoom {
   position: absolute;
   inset: 0;
@@ -1670,16 +1727,21 @@ html {
   }
 }
 
+/* 翻页箭头：钉在**左侧图片区**的左右两侧边缘、垂直居中。
+   图片区的下边止于胶片条上缘，照片也是按这块区域居中的，因此这里的「垂直居中」
+   与照片中心正好落在同一条水平线上。
+   容器铺满整块图片区，只为给两枚按钮定边；它自身不吃指针事件 —— 于是压在照片上的
+   缩放 / 平移手势不会被这条横带截胡，只有按钮本身可点。 */
 .viewer__arrows {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  inset: 0;
   display: flex;
+  align-items: center;
   justify-content: space-between;
   padding: 0 var(--space-16);
   pointer-events: none;
+  /* 压在照片之上：画框是「面内装饰层」，箭头属于它之上的工具层 */
+  z-index: var(--z-inset-chrome);
 }
 
 .viewer__arrows .icon-btn {
@@ -1689,13 +1751,17 @@ html {
   background: var(--color-material-ultra-thick);
   backdrop-filter: blur(var(--blur-md));
   box-shadow: var(--elevation-context);
-  opacity: 0;
-  transition: opacity var(--motion-duration-base);
+  /* 默认半透明（取「禁用档」的 40% 不透明度，不新增数值）：照片是主角，
+     箭头只作「此处可翻页」的暗示，不抢画面。 */
+  opacity: var(--opacity-disabled);
+  transition: opacity var(--motion-duration-base) var(--motion-easing-smooth);
 }
 
-/* 桌面端：鼠标进入查看器才显形，减少对照片的干扰 */
-.viewer:hover .viewer__arrows .icon-btn,
-.viewer:focus-within .viewer__arrows .icon-btn {
+/* 指针悬浮在图片区内才完全显形。.viewer__stage 就是左侧图片区，照片是它的子层，
+   因此指针落在照片上也同样命中；移到右栏的 EXIF 卡片或底部胶片条上就淡回半透明。
+   :focus-within 一并显形，键盘 Tab 到按钮时才看得见焦点落在哪一枚。 */
+.viewer__stage:hover .viewer__arrows .icon-btn,
+.viewer__stage:focus-within .viewer__arrows .icon-btn {
   opacity: 1;
 }
 
@@ -1833,24 +1899,30 @@ html {
 }
 
 /* --------------------------------------------------------------------------
- * EXIF 元数据卡片
+ * EXIF 元数据卡片（宽屏 = 屏幕右侧的固定信息栏）
  * 两层结构：
- *   外层 .viewer__exifclip 是**裁切窗** —— 紧贴画框右缘（left: 100%，不留缝），
- *     overflow 裁掉窗外的一切；
- *   内层 .viewer__exif 才是卡片本身，初值 x = -100%（自己整个宽度），藏进画框里侧。
- * 那道「卡片与照片之间的间隙」不写在这里 —— 它是被 Motion 演出来的：
- *   窗口从紧贴画框（x = 0）滑到退开一格（x = EXIF_GAP），卡片同时从 -100% 滑到 0。
- * 于是打开时卡片像从照片右缘「长出来」再缓缓离开，关闭时反向「贴回照片」，
- * 中途露出的永远只是窗口里那一条，不会在照片旁边留下半截黑条。
- * 高度取 100%（= 画框高）：照片多高卡片就多高，内容装不下时卡内滚动。
+ *   外层 .viewer__exifclip 是**裁切窗**，本身按视口固定：右边贴屏幕右缘、下边由
+ *     --viewer-safe-bottom 收在胶片条之上、宽度取 --exif-w。它的位置与尺寸于是只跟
+ *     视口与主题倍率有关 —— 换一张照片、或照片正在放大动画中，它都纹丝不动；
+ *   内层 .viewer__exif 才是卡片本身，入场前 x = +100%（被推到自己整个宽度之外，
+ *     也就是视口右缘以外）。
+ * 入场动画只由内层承担：从 +100% 滑到 0 并同步淡入；退场沿同一路径反向 ——
+ * 向右滑出视口并淡出至完全不可见。裁切窗负责裁掉被推到它右侧的那一段，
+ * 途中露出的永远只是窗里那一条，照片旁边因此不会留下半截卡片。
+ * 「卡片与照片之间的那格间隙」不写在这里：它由 Viewer.tsx 的 --viewer-rail 预留
+ * （图片区右边让出「卡宽 + 一格间隙」），照片因此永远不会压到卡片上。
  * -------------------------------------------------------------------------- */
 .viewer__exifclip {
-  position: absolute;
-  left: 100%;
+  position: fixed;
   top: 0;
+  right: 0;
+  bottom: var(--viewer-safe-bottom);
   width: var(--exif-w);
-  height: 100%;
+  /* 高度由 top / bottom 共同决定：不再随画框（照片）的高度变化 */
+  height: auto;
   overflow: hidden;
+  /* 压住画框（面内装饰层）之上：进出的放大动画里画框会扫过右栏那一带，卡片必须始终可见 */
+  z-index: var(--z-inset-chrome);
 }
 
 .viewer__exif {
@@ -1873,7 +1945,7 @@ html {
   display: none;
 }
 
-/* 卡片顶部三行摘要：标题 / 分类·日期 / 拍摄地 —— 「基本信息」与下面的 EXIF 表分开一段 */
+/* 卡片顶部标题行：只放标题（分类 / 拍摄时间 / 拍摄地已并入下方「基本信息」分组） */
 .viewer__exifhead {
   flex: none;
   display: flex;
@@ -1885,11 +1957,6 @@ html {
 .viewer__exiftitle {
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
-}
-
-.viewer__exifmeta {
-  font-size: var(--font-size-caption);
-  color: var(--color-text-tertiary);
 }
 
 /* 照片描述：整段正文，位于卡片顶部摘要与 EXIF 表之间。
@@ -2001,8 +2068,82 @@ html {
   text-align: right;
 }
 
+/* ---- 分组后的拍摄信息（见 Viewer.tsx 的 exifSections） ----
+   卡片按「基本信息 / 拍摄参数 / 设备信息 / 标签」分成若干区块，
+   每个区块自带标题；参数行沿用上面的 .exif-row。 */
+.exif-sec {
+  flex: none;
+}
+
+/* 区块标题：小号灰标签。上沿留白把本组与上一组分开，下沿只留一格让标题贴近自己的内容 */
+.exif-sec__title {
+  margin: 0;
+  padding: var(--space-12) var(--space-12) var(--space-6);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--font-tracking-meta);
+  color: var(--color-text-tertiary);
+}
+
+/* 拍摄参数的四枚「图标 + 值」标签：四等分定宽，因此永远在一行、不随值的长短换行。
+   横向内边距收一档（8px）：卡片本就不宽，四枚并排时这点余量要留给值。 */
+.exif-chips {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-8) var(--space-6);
+}
+
+/* 一枚标签：图标在左、值在右，居中排在等分格里；min-width:0 让值可以省略号收尾 */
+.exif-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: var(--size-chip);
+  border-radius: var(--radius-sm);
+  background: var(--color-fill-tertiary);
+  color: var(--color-text-secondary);
+}
+
+.exif-chip__icon {
+  flex: none;
+  width: var(--font-size-label);
+  height: var(--font-size-label);
+  color: var(--color-text-tertiary);
+}
+
+/* 值用等宽字：ISO / 快门这类数字串排在一起时才对齐、也才读得快。
+   极端情况下（卡片被缩到最窄）宁可省略号，也不让栅格被撑破。 */
+.exif-chip__v {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 标签：胶囊排开。数量不定，因此不像参数那样定宽，而是自然宽度 + 自动换行 */
+.exif-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-12) var(--space-6);
+}
+
+.exif-tag {
+  padding: 2px var(--space-8);
+  border-radius: var(--radius-full);
+  background: var(--color-fill-tertiary);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+
 /* 窄屏（<900px）：照片左右没有余量摆卡片，EXIF 于是收成**底部抽屉** ——
-   平时完全收起（只留左上角一枚信息按钮），点开后从屏幕最底部整幅升起，卡片内纵向滚动。
+   平时完全收起（只留左上角一枚信息按钮），点开后从屏幕最底部整幅升起并淡入，
+   关闭时降下并淡出，卡片内纵向滚动。
    900 这个断点必须与 Viewer.tsx 的 WIDE_MIN 一致。
    【为什么不再横躺】手机竖屏时横躺的卡片只有 128px 高，EXIF 表被压成一堆竖排短列，
    读起来要来回扫；抽屉能完整给出纵向的键值表，与宽屏同构。 */

@@ -141,3 +141,36 @@ export function placeholderColors(item: { id: string }): readonly [string, strin
 export function formatDate(date: string): string {
   return date.length === 10 ? date : date.slice(0, 10);
 }
+
+/**
+ * 精确拍摄时间文案，如「2025/10/02 13:43:33」—— 查看器的拍摄信息里必须读到秒。
+ * 【为什么按浏览器本地时区渲染】接口给的是 ISO-8601 绝对时刻（带 Z / 偏移），
+ * 没有「相机当时的时区」这层信息可依；按访客本地时区呈现是与相册类应用一致的语义。
+ * 【为什么要回退】早期导入的照片可能没有精确时间，此时退回 date 的日期口径，不留空。
+ */
+export function formatDateTime(takenAt: string | null | undefined, date: string): string {
+  if (takenAt) {
+    const parsed = new Date(takenAt);
+    if (!Number.isNaN(parsed.getTime())) {
+      const pad = (value: number): string => String(value).padStart(2, '0');
+      const day = `${parsed.getFullYear()}/${pad(parsed.getMonth() + 1)}/${pad(parsed.getDate())}`;
+      const clock = `${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`;
+      return `${day} ${clock}`;
+    }
+  }
+  return formatDate(date);
+}
+
+/** 原始字节数 → 展示文案，如「6.5MB」「1.20GB」；缺值返回空串 */
+export function fileSizeOf(bytes: number | null | undefined): string {
+  if (bytes == null || bytes <= 0) return '';
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1024 ? `${(mb / 1024).toFixed(2)}GB` : `${mb.toFixed(1)}MB`;
+}
+
+/** 像素总数文案，如「31 MP」；缺宽高时返回空串 */
+export function megapixelsOf(photo: Photo): string {
+  const { width, height } = photo;
+  if (!width || !height) return '';
+  return `${Math.round((width * height) / 1_000_000)} MP`;
+}

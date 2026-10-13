@@ -37,7 +37,11 @@ export type IconName =
   | 'list'
   | 'arrowUp'
   | 'arrowDown'
-  | 'sliders';
+  | 'sliders'
+  /** 拍摄参数四件套：焦距 / 快门 / ISO（光圈已有 aperture） */
+  | 'focus'
+  | 'timer'
+  | 'gauge';
 
 /** 每个图标只是一段 path 描述，属性写在 <g> 上，避免逐个重复 */
 const SHAPES: Record<IconName, ReactNode> = {
@@ -236,6 +240,33 @@ const SHAPES: Record<IconName, ReactNode> = {
       <circle cx="9" cy="8" r="1.8" />
       <circle cx="15" cy="12" r="1.8" />
       <circle cx="7" cy="16" r="1.8" />
+    </g>
+  ),
+  /** 焦距：四角对焦框 + 中心焦点，表达「把多远的东西收进画面」 */
+  focus: (
+    <g fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 8.5V6a2 2 0 012-2h2.5" />
+      <path d="M15.5 4H18a2 2 0 012 2v2.5" />
+      <path d="M20 15.5V18a2 2 0 01-2 2h-2.5" />
+      <path d="M8.5 20H6a2 2 0 01-2-2v-2.5" />
+      <circle cx="12" cy="12" r="2.6" />
+    </g>
+  ),
+  /** 快门：秒表（表冠 + 表盘 + 指针），表达「曝光了多久」 */
+  timer: (
+    <g fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="13.5" r="7" />
+      <path d="M12 13.5V9.6" />
+      <path d="M9.8 3.5h4.4" />
+      <path d="M12 3.5v3" />
+    </g>
+  ),
+  /** ISO：仪表盘（半圆刻度 + 指针），表达「感光度档位」 */
+  gauge: (
+    <g fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.5 17a7.5 7.5 0 0115 0" />
+      <path d="M12 17l3.8-4.6" />
+      <circle cx="12" cy="17" r="1" fill="currentColor" stroke="none" />
     </g>
   ),
 };
