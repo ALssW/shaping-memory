@@ -11,6 +11,7 @@
     "seed:catalog": "ts-node -r tsconfig-paths/register src/seed-catalog.ts",
     "clear": "ts-node -r tsconfig-paths/register src/clear-data.ts",
     "backfill:place": "ts-node -r tsconfig-paths/register src/backfill-place.ts",
+    "backfill:taken-at": "ts-node -r tsconfig-paths/register src/backfill-taken-at.ts",
     "backfill:objects": "ts-node -r tsconfig-paths/register src/backfill-objects.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit"

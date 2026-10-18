@@ -15,7 +15,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CATEGORIES, EXIF_FIELDS, exifTextToSubmit } from '@shaping-memory/core';
+import { EXIF_FIELDS, exifTextToSubmit } from '@shaping-memory/core';
 import type { GeoPoint, Photo } from '@shaping-memory/core';
 import { exifApi, photoApi } from '@shaping-memory/sdk';
 import type { ExifPatch, PhotoPatch } from '@shaping-memory/sdk';
@@ -24,6 +24,7 @@ import { Chip, ChipRow, Glass, Icon } from './primitives';
 import { ExifFieldsSection } from './ExifFieldsSection';
 import { GpsPicker } from './GpsPicker';
 import { SaveToAlbumButton } from './SaveToAlbumButton';
+import { useCategories } from '../hooks/useCategories';
 import { colors, radius, size, space, text } from '../theme';
 
 const PRIVACY_MARKS: ReadonlyArray<NonNullable<PhotoPatch['privacy']>> = ['inherit', 'visible', 'blur', 'hidden'];
@@ -33,8 +34,6 @@ const PRIVACY_LABEL: Record<NonNullable<PhotoPatch['privacy']>, string> = {
   blur: '模糊',
   hidden: '隐藏',
 };
-
-const CATEGORY_OPTIONS = CATEGORIES.filter((name) => name !== '全部');
 
 /** 一次批量应用要提交的全部内容 */
 interface BatchPlan {
@@ -54,6 +53,8 @@ interface BatchEditDialogProps {
 
 export function BatchEditDialog({ photos, onClose, onDone }: BatchEditDialogProps) {
   const insets = useSafeAreaInsets();
+  /** 分类候选来自后端（与单张编辑、画廊筛选条同一来源），不再依赖前端常量 */
+  const categories = useCategories();
 
   // 元数据：空 = 不修改
   const [category, setCategory] = useState('');
@@ -171,7 +172,7 @@ export function BatchEditDialog({ photos, onClose, onDone }: BatchEditDialogProp
                 <Text style={styles.section}>照片信息（统一设置）</Text>
                 <Text style={styles.fieldLabel}>分类</Text>
                 <ChipRow>
-                  {CATEGORY_OPTIONS.map((name) => (
+                  {categories.map((name) => (
                     <Chip key={name} label={name} active={name === category} onPress={() => setCategory(name === category ? '' : name)} />
                   ))}
                 </ChipRow>

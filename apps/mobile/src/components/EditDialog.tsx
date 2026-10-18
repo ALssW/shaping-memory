@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CATEGORIES, EXIF_FIELDS, exifRawToText, exifSameText, exifTextToSubmit } from '@shaping-memory/core';
+import { EXIF_FIELDS, exifRawToText, exifSameText, exifTextToSubmit } from '@shaping-memory/core';
 import type { GeoPoint, Photo } from '@shaping-memory/core';
 import { exifApi, photoApi } from '@shaping-memory/sdk';
 import type { ExifPatch, PhotoExifResult, PhotoPatch } from '@shaping-memory/sdk';
@@ -25,6 +25,7 @@ import type { ExifPatch, PhotoExifResult, PhotoPatch } from '@shaping-memory/sdk
 import { Chip, ChipRow, Glass, Icon } from './primitives';
 import { ExifFieldsSection } from './ExifFieldsSection';
 import { GpsPicker } from './GpsPicker';
+import { useCategories } from '../hooks/useCategories';
 import { colors, radius, size, space, text } from '../theme';
 
 const PRIVACY_MARKS: ReadonlyArray<NonNullable<PhotoPatch['privacy']>> = ['inherit', 'visible', 'blur', 'hidden'];
@@ -34,8 +35,6 @@ const PRIVACY_LABEL: Record<NonNullable<PhotoPatch['privacy']>, string> = {
   blur: '模糊',
   hidden: '隐藏',
 };
-
-const CATEGORY_OPTIONS = CATEGORIES.filter((name) => name !== '全部');
 
 /** 文件里的原始值 → 表单 canonical 文本（口径见 core exif-values.ts） */
 function initialFormText(fields: Record<string, string>): Record<string, string> {
@@ -52,6 +51,8 @@ interface EditDialogProps {
 
 export function EditDialog({ photo, onClose, onChanged }: EditDialogProps) {
   const insets = useSafeAreaInsets();
+  /** 分类候选来自后端（与画廊筛选条、Web 端 EditDialog 同一来源），不再依赖前端常量 */
+  const categories = useCategories();
 
   // 元数据草稿
   const [title, setTitle] = useState(photo.title);
@@ -225,7 +226,7 @@ export function EditDialog({ photo, onClose, onChanged }: EditDialogProps) {
             </Field>
             <Field label="分类">
               <ChipRow>
-                {CATEGORY_OPTIONS.map((name) => (
+                {categories.map((name) => (
                   <Chip key={name} label={name} active={name === category} onPress={() => setCategory(name)} />
                 ))}
               </ChipRow>

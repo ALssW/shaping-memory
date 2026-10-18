@@ -5,9 +5,10 @@
  * 与 Web 端一致：品牌字用 meta 档宽字距，点由 accent 现算光晕；
  * 标语在窄屏让位给导航胶囊（与 Web 的 .brand__sub 媒体查询同一档断点）。
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { BRAND_SLOGAN_MIN_WIDTH } from '@shaping-memory/core';
+import { settingsApi } from '@shaping-memory/sdk';
 import type { PhotoQuery } from '@shaping-memory/sdk';
 
 import { IconButton, PillBar } from './primitives';
@@ -28,9 +29,8 @@ const NAV_OPTIONS: readonly PillOption<Module>[] = [
   { value: 'admin', label: '后台', icon: 'info' },
 ];
 
-/** 品牌名与标语：与 Web 的 BRAND_FALLBACK 同一份文案（移动端暂未接站点设置） */
-const BRAND_NAME = 'Shaping Memory';
-const BRAND_SLOGAN = 'shape of my memory, snapshot of my mind';
+/** 缺省品牌文案：与站点设置的出厂值一致，接口不可用时页头不至于空着（与 Web 的 BRAND_FALLBACK 同一份） */
+const BRAND_FALLBACK = { name: 'Shaping Memory', slogan: 'shape of my memory, snapshot of my mind' };
 
 interface TopNavProps {
   module: Module;
@@ -44,32 +44,54 @@ interface TopNavProps {
 }
 
 export function TopNav({ module, onNavigate, onSearch, session, onLogin, onLogout }: TopNavProps) {
+  /** 品牌名与标语来自站点设置（后台可改），读不到就沿用缺省文案 —— 与 Web 端 TopNav 同一口径 */
+  const [brand, setBrand] = useState(BRAND_FALLBACK);
   const [searchOpen, setSearchOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const admin = isFrontAdmin(session);
   /* 标语是否出场只看视口宽度：与 Web 的媒体查询同一档 */
   const showSlogan = useBreakpoint().width >= BRAND_SLOGAN_MIN_WIDTH;
 
+  useEffect(() => {
+    // 用 canceled 标记丢弃「组件已卸载后才到」的响应，避免无谓的 setState
+    let canceled = false;
+    void settingsApi
+      .all()
+      .then((value) => {
+        if (canceled) return;
+        setBrand({ name: value['site.title'], slogan: value['site.slogan'] });
+      })
+      .catch(() => {
+        // 读不到设置就沿用缺省品牌文案：页头不值得为一次失败请求报错
+      });
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
   return (
     <View style={styles.bar}>
       <View style={styles.brand}>
         <View style={styles.dot} />
         <Text style={styles.name} numberOfLines={1}>
-          {BRAND_NAME}
+          {brand.name}
         </Text>
         {/* 窄屏不渲染：导航项是操作入口，标语是气质，先牺牲后者（与 Web 同一取舍） */}
         {showSlogan ? (
           <Text style={styles.slogan} numberOfLines={1}>
-            {BRAND_SLOGAN}
+            {brand.slogan}
           </Text>
         ) : null}
       </View>
       <View style={styles.actions}>
         <PillBar options={NAV_OPTIONS} value={module} onChange={onNavigate} label="主导航" iconOnly />
-        {/* 搜索图标：点击唤出搜索面板，再点一次收起 */}
+        {/* 搜索图标：点击唤出搜索面板，再点一次收起。
+            顶栏是本站最密的一行控件（5 个胶囊 + 2 个图标 + 品牌区），
+            因此两个图标按钮取 compact 档，把宽度留给左侧的品牌名 */}
         <IconButton
           name="search"
           label="搜索"
+          size="compact"
           active={searchOpen}
           onPress={() => {
             setSearchOpen((prev) => !prev);
@@ -80,6 +102,7 @@ export function TopNav({ module, onNavigate, onSearch, session, onLogin, onLogou
         <IconButton
           name="user"
           label={session ? '账号' : '登录'}
+          size="compact"
           active={admin || accountOpen}
           onPress={() => {
             setAccountOpen((prev) => !prev);
@@ -119,7 +142,11 @@ const styles = StyleSheet.create({
     zIndex: 20,
     overflow: 'visible',
   },
-  /* flexShrink：窄屏时品牌区先收，不许把右侧的导航胶囊与图标挤出可视区 */
+  /* flexShrink：窄屏时品牌区先收，不许把右侧的导航胶囊与图标挤出可视区。
+     收起只是兜底 —— 正常手机上品牌名应当完整显示：369dp 宽的屏（小米15）
+     去掉两侧 12dp 内边距后剩 345dp，右侧 actions 取「紧凑图标按钮 + 紧凑纯图标胶囊」
+     后约 218dp，品牌区因此能拿到约 119dp，足够放下 12px 的 Shaping Memory。
+     若把图标按钮恢复成 default 档或把胶囊内边距放宽，品牌名会重新被截断成 Shapi…。 */
   brand: { flexDirection: 'row', alignItems: 'center', gap: space.s8, flexShrink: 1, minWidth: 0 },
   /** 右侧：胶囊导航 + 搜索图标，各自横向排开 */
   actions: { flexDirection: 'row', alignItems: 'center', gap: space.s8, flexShrink: 0 },

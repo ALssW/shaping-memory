@@ -21,7 +21,7 @@
  * 【查看器的两个下标操作都保留 origin】origin 只在放大时用得上，但结构里必须一直带着它，
  * 否则翻页时构造新状态会把起点矩形丢掉，关闭时就没法飞回原位。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { filterByCategory, searchPhotos, sortByDate } from '@shaping-memory/core';
 import type { GalleryView, Photo, SearchQuery, SortOrder } from '@shaping-memory/core';
 import { albumApi, categoryApi } from '@shaping-memory/sdk';
@@ -46,6 +46,10 @@ const SORT_OPTIONS: readonly PillOption<SortOrder>[] = [
   { value: 'asc', label: '正序（最旧在前）', icon: 'arrowUp' },
 ];
 
+/* 工具栏「滚过即淡出」的阈值：1px 是触摸板微动也会触发的量级，读数会闪；
+   8px 与 space-8 同档，等于「用户真的开始往下看了」才淡。 */
+const TOOLBAR_SCROLL_THRESHOLD = 8;
+
 /** 刻度粒度：月看整份档案的分布，日做逐日精读 —— 只换刻度密度，不换数据 */
 const SCALE_OPTIONS: readonly PillOption<RailScale>[] = [
   { value: 'month', label: '月' },
@@ -55,14 +59,8 @@ const SCALE_OPTIONS: readonly PillOption<RailScale>[] = [
 interface GalleryScreenProps {
   photos: readonly Photo[];
   loading: boolean;
-  /** 服务端还有下一页（懒加载分页）；相册模式恒为 false —— 册内是一次取回的 */
-  hasMore: boolean;
-  /** 正在追加下一页 */
-  loadingMore: boolean;
-  /** 取数错误：首屏失败时整块呈现，翻页失败时由底部状态条呈现并给重试入口 */
+  /** 取数错误：首屏失败时整块呈现并给重试入口 */
   error: string | null;
-  /** 触发下一页：底部哨兵进入视口时自动调用，失败后也由「重试」按钮调用 */
-  onLoadMore: () => void;
   filters: GalleryFilters;
   onFiltersChange: (patch: Partial<GalleryFilters>) => void;
   /** EXIF 搜索条件：在分类过滤之后、排序之前应用 */
@@ -85,10 +83,7 @@ interface ViewerState {
 export function GalleryScreen({
   photos,
   loading,
-  hasMore,
-  loadingMore,
   error,
-  onLoadMore,
   filters,
   onFiltersChange,
   search,
@@ -98,6 +93,15 @@ export function GalleryScreen({
   onToggleLike,
 }: GalleryScreenProps) {
   const albumId = filters.albumId;
+
+  /* 画廊模块挂载期间让页面滚动条「隐形」（html.is-gallery-module，见 app.css）：
+     覆盖墙面 / 名册 / 横轨全部视图 —— 只把滑块画透明，不摘滚动条、不改 overflow，
+     视口宽度不变、零重排，滚动本身仍走浏览器原生滚动；其他模块照常显示滚动条。 */
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('is-gallery-module');
+    return () => root.classList.remove('is-gallery-module');
+  }, []);
 
   /* 分类 chip 来自后端（GET /categories）。拉取中或失败时只保留「全部」，
      保证筛选条永远可用、不会白屏。 */
@@ -167,30 +171,7 @@ export function GalleryScreen({
   const busy = albumId ? albumLoading || !album : loading;
   const [viewer, setViewer] = useState<ViewerState | null>(null);
 
-  /* ---------------------- 无感分页（底部哨兵） ---------------------- */
-
-  /* 相册模式的数据是一次取回的，没有下一页；出错时也**不**自动续取 ——
-     否则「请求失败 → 哨兵仍在视口 → 再失败」会转成死循环把流量打光，
-     改为停止观察、由用户点「重试」。 */
-  const canLoadMore = !albumId && hasMore && !loadingMore && !error;
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const node = sentinelRef.current;
-    if (!node || !canLoadMore) return;
-    /* 用 IntersectionObserver 而不是 scroll 事件：不占用滚动回调（列表越长开销越明显），
-       也不必知道页面的滚动容器是哪一个。rootMargin 向下多留一屏做预取 ——
-       等哨兵真正进入视口才请求就已经晚了，用户会先看到一段空白。 */
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) onLoadMore();
-      },
-      { rootMargin: '800px 0px' },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-    // canLoadMore 里含 loadingMore：每页取完会重新观察一次，
-    // 于是「新一页太短、哨兵仍停在视口内」也能继续往下取，不会卡住。
-  }, [canLoadMore, onLoadMore]);
+  /* 档案一次性取回后没有「下一页」：取数错误统一走上方「空列表错误态」的呈现与重试 */
 
   /* 前台编辑（仅 admin）：编辑模式下点照片切换选中，浮动条提供批量编辑入口 */
   const [editing, setEditing] = useState(false);
@@ -250,6 +231,30 @@ export function GalleryScreen({
       return { ...prev, list: ordered, index: Math.min(prev.index, ordered.length - 1) };
     });
   }, [ordered]);
+
+  /* 工具栏「滚过即淡出」：滚动位置越过阈值就给根元素打 is-scrolled，
+     样式层据此把 .gallery-toolbar 调成半透明，hover 时恢复（见 app.css）。
+     挂 window 而不是某个滚动容器：本页滚动发生在 documentElement 上。
+     passive + rAF 合帧：scroll 触发频率远高于渲染帧率，合帧后每帧最多写一次 class。 */
+  useEffect(() => {
+    const root = document.documentElement;
+    let rafId = 0;
+    const apply = () => {
+      rafId = 0;
+      root.classList.toggle('is-scrolled', window.scrollY > TOOLBAR_SCROLL_THRESHOLD);
+    };
+    const onScroll = () => {
+      if (rafId !== 0) return;
+      rafId = requestAnimationFrame(apply);
+    };
+    apply();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (rafId !== 0) cancelAnimationFrame(rafId);
+      root.classList.remove('is-scrolled');
+    };
+  }, []);
 
   return (
     <section className="module module--gallery">
@@ -361,23 +366,6 @@ export function GalleryScreen({
           onToggleSelect={toggleSelect}
         />
       )}
-
-      {/* 分页哨兵 + 底部状态条：相册模式不分页，整块不渲染。
-          哨兵自己无内容，仅作为「看到这里就该取下一页」的标记，高度交给 CSS 给一点余量。 */}
-      {!albumId && !busy && ordered.length > 0 ? (
-        <div className="load-more" ref={sentinelRef}>
-          {loadingMore ? (
-            <span className="load-more__text">正在加载更多…</span>
-          ) : error ? (
-            <>
-              <span className="load-more__text load-more__text--error">{error}</span>
-              <button type="button" className="search-action" onClick={onLoadMore}>
-                重试
-              </button>
-            </>
-          ) : null}
-        </div>
-      ) : null}
 
       {/* 不用 AnimatePresence：查看器自己管两段式关闭（先播退场动画，播完才调 onClose），
           父级只负责在收到 onClose 时卸载 —— 退出动画因此不会被打断 */}

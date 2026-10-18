@@ -130,8 +130,29 @@ function isWideViewport(): boolean {
   return window.innerWidth >= WIDE_MIN;
 }
 
-/** 胶片条一次最多摆这么多张：以当前这张为中心取窗口，而不是把整卷铺开 */
-const STRIP_SIZE = 20;
+/**
+ * 一枚胶片缩略图的边长（px，随主题倍率现算）：与 app.css 的 --strip-dot 同式 ——
+ * space-64 + space-4 再整体缩小 1.5 倍。CSS 量在 JS 里只留这一份镜像（见 S4 的注释）。
+ */
+function stripDotSize(): number {
+  return (themeSpace(S64) + themeSpace(S4)) / 1.5;
+}
+
+/**
+ * 胶片条一排能摆多少张：按当前视口宽度现算 —— 能摆多少就摆多少，
+ * 缩略图从页面最左一直排到页面最右（而不是固定张数居中、两侧留空）。
+ * 【为什么现算】主题倍率一放大，缩略图与间距同比例变大，固定张数在宽屏排不满、
+ * 小屏又溢出滚动；按宽度取整则任何屏宽、任何倍率都恰好铺满一排。
+ */
+function stripCapacity(): number {
+  /* 可用宽 = 布局视口 − 胶片条两侧 padding（space-8）− 条内两侧 padding（space-12），
+     与 app.css 的 .viewer__strip / .viewer__stripbox 同口径 */
+  const usable = layoutViewport().width - themeSpace(S8) * 2 - themeSpace(S12) * 2;
+  /* n 枚共 n×缩略图 + (n−1)×间隙（space-8）—— 判「摆得下」前把间隙平移一格再取整 */
+  const cell = stripDotSize() + themeSpace(S8);
+  return Math.max(1, Math.floor((usable + themeSpace(S8)) / cell));
+}
+
 /** 滚轮翻页的节流：一次滚动操作会连发几十个 wheel 事件，不锁就会一滑跳过十几张 */
 const WHEEL_LOCK_MS = 180;
 
@@ -160,8 +181,8 @@ interface ViewerGeom {
 
 /** 按当前主题倍率算一份几何量（每次渲染现算：倍率变了，下一帧就对上） */
 function currentGeom(): ViewerGeom {
-  /* 一枚缩略图：space-64 + space-4，再整体缩小 1.5 倍（与 app.css 的 --strip-dot 同式） */
-  const stripDot = (themeSpace(S64) + themeSpace(S4)) / 1.5;
+  /* 一枚缩略图：与 app.css 的 --strip-dot 同式（见 stripDotSize） */
+  const stripDot = stripDotSize();
   /** 胶片条高 = 一枚缩略图 + 上下内边距 space-20 × 2 */
   const stripH = stripDot + themeSpace(S20) * 2;
   return {
@@ -649,11 +670,16 @@ export function Viewer({ list, index, origin, onStep, onSeek, onClose, admin, ca
     };
   }, [scrimSrc]);
 
-  /* 胶片条只摆 STRIP_SIZE 张：以当前这张为中心向前后各取一半，形成一条**滑动窗口**
-     （而不是把整卷铺开）。走到列表两端时窗口被夹在边上，
-     夹取后当前这张一定还在窗口里 —— 这也是下面按 index − start 取元素的前提。 */
-  const stripStart = Math.max(0, Math.min(index - Math.floor(STRIP_SIZE / 2), list.length - STRIP_SIZE));
-  const stripItems = list.slice(stripStart, stripStart + STRIP_SIZE);
+  /* 胶片条一排摆 stripCapacity() 张（一排能摆多少就摆多少，铺满从最左到最右），
+     以当前这张为中心向前后各取一半，形成一条**滑动窗口**（而不是把整卷铺开）。
+     走到列表两端时窗口被夹在边上，夹取后当前这张一定还在窗口里
+     —— 这也是下面按 index − start 取元素的前提。 */
+  const stripSize = Math.min(stripCapacity(), list.length);
+  const stripStart = Math.max(0, Math.min(index - Math.floor(stripSize / 2), list.length - stripSize));
+  const stripItems = list.slice(stripStart, stripStart + stripSize);
+  /* 列表长过一排（窗口要滑动）时把取整余量均摊进间隙，缩略图正好从最左排到最右；
+     不满一排时仍走 auto 外边距居中（见 app.css 的 is-filled 规则）。 */
+  const stripFilled = list.length > stripSize;
 
   /* 跳转后把当前缩略图带进视野中央：用容器自身的 scrollTo，
      而不是 scrollIntoView —— 后者会连带把整页也滚一下。 */
@@ -1092,7 +1118,7 @@ export function Viewer({ list, index, origin, onStep, onSeek, onClose, admin, ca
         animate={{ opacity: leaving ? 0 : 1 }}
         transition={fade()}
       >
-        <div className="viewer__stripbox" ref={stripRef} role="tablist" aria-label="照片导航">
+        <div className={`viewer__stripbox${stripFilled ? ' is-filled' : ''}`} ref={stripRef} role="tablist" aria-label="照片导航">
           {stripItems.map((item, offset) => {
             const at = stripStart + offset;
             const isOn = at === index;

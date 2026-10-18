@@ -16,6 +16,8 @@ import type { ExifFull, ExifWriteValue } from '@shaping-memory/exif';
 import type { MediaInsert } from '@shaping-memory/db';
 import { EXIF_EDITABLE_TAGS } from '@shaping-memory/core';
 
+import { parseTakenAt } from '../import/infer';
+
 /** exif_metadata 中需要随文件同步的展示列 */
 export interface ExifDisplayPatch {
   cam: string | null;
@@ -96,18 +98,15 @@ export function displayPatchOf(fields: ExifFull): ExifDisplayPatch {
 
 /**
  * 从 EXIF 的 DateTimeOriginal 解析出 media 的两个日期列。
- * 输入是 exiftool 原生格式 "2024:05:01 10:23:45"（与导入管线 parseTakenAt 同一口径）。
+ * 输入是 exiftool 原生格式 "2024:05:01 10:23:45"（与导入管线共用 parseTakenAt，
+ * 时区口径因此必然一致：一律按中国标准时间 UTC+8 解读）。
  * 改拍摄时间会改变照片在时间线里的位置，因此这一步必须跟着写。
  */
 export function mediaDatePatchOf(fields: ExifFull): Partial<MediaInsert> {
   const raw = fields.DateTimeOriginal ?? fields.CreateDate ?? '';
-  const matched = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(raw);
-  if (!matched) return {};
-  const [, y, mo, d, h, mi, s] = matched;
-  const iso = `${y}-${mo}-${d}T${h}:${mi}:${s}`;
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return {};
-  return { captureAt: `${y}-${mo}-${d}`, takenAt: parsed };
+  const { captureAt, takenAt } = parseTakenAt(raw);
+  if (captureAt == null && takenAt == null) return {};
+  return { captureAt, takenAt };
 }
 
 /** GPS 的三个本体 tag + 三个方向 tag：由地图选点写入，不在 EXIF_FIELDS 清单里，需单独放行 */

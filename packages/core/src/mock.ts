@@ -53,6 +53,10 @@ export interface SearchQuery {
   hasGps?: boolean;
   /** 标签（AND：选中的标签必须全部命中）；空数组或缺省即不限 */
   tags?: string[];
+  /** 省级行政区精确匹配（取值来自地点候选）；缺省即不限 */
+  province?: string;
+  /** 市级行政区精确匹配（取值来自地点候选）；缺省即不限 */
+  city?: string;
 }
 
 /**
@@ -75,6 +79,9 @@ export function searchPhotos(photos: readonly Photo[], query: SearchQuery): read
     // 后端对感光度是精确匹配（Number(p.iso) 兼容 null 与字符串两种落地形态）
     if (query.iso !== undefined && Number(p.iso) !== query.iso) return false;
     if (query.hasGps !== undefined && query.hasGps !== Boolean(p.gps)) return false;
+    // 省 / 市精确匹配（与服务端的等值条件同口径；无定位照片省市为空，自然落选）
+    if (query.province && p.province !== query.province) return false;
+    if (query.city && p.city !== query.city) return false;
     // 标签 AND：每一枚选中的标签都要在这张照片的标签里（空数组即不限）
     if (query.tags && query.tags.length > 0) {
       const names = p.tags.map((t) => t.name);
@@ -144,8 +151,10 @@ export function formatDate(date: string): string {
 
 /**
  * 精确拍摄时间文案，如「2025/10/02 13:43:33」—— 查看器的拍摄信息里必须读到秒。
- * 【为什么按浏览器本地时区渲染】接口给的是 ISO-8601 绝对时刻（带 Z / 偏移），
- * 没有「相机当时的时区」这层信息可依；按访客本地时区呈现是与相册类应用一致的语义。
+ * 【为什么固定按中国标准时间渲染】接口给的是 ISO-8601 绝对时刻，而拍摄时间的语义是
+ * 「中国标准时间（UTC+8）的墙钟时间」（EXIF 时间无时区信息，入库时已按 UTC+8 解析）。
+ * 若跟随浏览器本地时区渲染，海外访客看到的会是换算后的时刻，与快门按下的「墙上时间」
+ * 不符；因此统一换算到 UTC+8 再格式化，任何环境下同一张照片的文案都一致。
  * 【为什么要回退】早期导入的照片可能没有精确时间，此时退回 date 的日期口径，不留空。
  */
 export function formatDateTime(takenAt: string | null | undefined, date: string): string {
@@ -153,8 +162,10 @@ export function formatDateTime(takenAt: string | null | undefined, date: string)
     const parsed = new Date(takenAt);
     if (!Number.isNaN(parsed.getTime())) {
       const pad = (value: number): string => String(value).padStart(2, '0');
-      const day = `${parsed.getFullYear()}/${pad(parsed.getMonth() + 1)}/${pad(parsed.getDate())}`;
-      const clock = `${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`;
+      // 绝对时刻平移 +8 小时后按 UTC 读表，等价于东八区读数，且不依赖运行环境时区
+      const wall = new Date(parsed.getTime() + 8 * 60 * 60 * 1000);
+      const day = `${wall.getUTCFullYear()}/${pad(wall.getUTCMonth() + 1)}/${pad(wall.getUTCDate())}`;
+      const clock = `${pad(wall.getUTCHours())}:${pad(wall.getUTCMinutes())}:${pad(wall.getUTCSeconds())}`;
       return `${day} ${clock}`;
     }
   }

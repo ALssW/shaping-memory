@@ -34,13 +34,18 @@ export function inferCategory(): string {
   return '纪实';
 }
 
-/** 把 EXIF 的 "YYYY:MM:DD HH:MM:SS" 解析成捕获日期（YYYY-MM-DD）与精确时间 */
+/**
+ * 把 EXIF 的 "YYYY:MM:DD HH:MM:SS" 解析成捕获日期（YYYY-MM-DD）与精确时间。
+ * 【为什么显式带 +08:00】EXIF 时间无时区信息，语义是「拍摄地当时的墙上时间」；
+ * 本档案面向中国场景，一律按中国标准时间（UTC+8）解读并存为绝对时刻（timestamptz），
+ * 不带偏移后缀的写法会被 Node 按服务器本地时区解读，服务器时区不同就会整体偏移。
+ */
 export function parseTakenAt(raw: string): { captureAt: string | null; takenAt: Date | null } {
   const full = raw.match(/^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
   const dayOnly = full ? null : raw.match(/^(\d{4}):(\d{2}):(\d{2})/);
   if (full) {
     const [y, mo, d, h, mi, s] = full.slice(1);
-    const date = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}`);
+    const date = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}+08:00`);
     return {
       captureAt: `${y}-${mo}-${d}`,
       takenAt: Number.isNaN(date.getTime()) ? null : date,

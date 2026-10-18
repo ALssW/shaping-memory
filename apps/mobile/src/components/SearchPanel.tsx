@@ -23,14 +23,16 @@
  * DICTIONARY_KINDS：标题用 fieldLabel、占位符用 placeholder，与后端口径同源，
  * 不会出现「前端叫快门、后端叫 speed」这种各写一份的不一致。
  */
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DICTIONARY_KINDS } from '@shaping-memory/core';
 import type { DictionaryKind } from '@shaping-memory/core';
-import type { PhotoQuery } from '@shaping-memory/sdk';
+import { searchApi } from '@shaping-memory/sdk';
+import type { PhotoQuery, Region } from '@shaping-memory/sdk';
 
 import { DictionaryField } from './DictionaryField';
+import { SelectField } from './SelectField';
 import { Glass, Icon } from './primitives';
 import { TagFilter } from './TagFilter';
 import { useBackClose } from '../hooks/useBackClose';
@@ -82,7 +84,7 @@ export function SearchPanel({ onApply, onClose }: SearchPanelProps) {
   const columns = Math.max(1, Math.floor((innerWidth + FIELD_GAP) / (FIELD_MIN_WIDTH + FIELD_GAP)));
   const fieldWidth = (innerWidth - (columns - 1) * FIELD_GAP) / columns;
 
-  /* 手机竖屏下 9 个字段会高过屏幕，字段区自己滚；提交行钉在底部（与 Web 同结构）。
+  /* 手机竖屏下字段多到会高过屏幕，字段区自己滚；提交行钉在底部（与 Web 同结构）。
      space.s64 让出的正是页头 + 底部留白，卡片不会顶到屏幕外。 */
   const bodyMaxHeight = height - insets.top - space.s64;
 
@@ -113,6 +115,47 @@ export function SearchPanel({ onApply, onClose }: SearchPanelProps) {
   };
 
   const hasGpsValue = draft.hasGps === undefined ? '' : draft.hasGps ? '1' : '0';
+
+  /* 省市候选（档案里出现过的「省 → 市」，来源 /search/regions）：两个下拉共用一份，
+     面板挂载即拉取；卸载后的响应要拦掉，避免面板反复开合时写已卸载的组件。 */
+  const [regions, setRegions] = useState<readonly Region[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    searchApi
+      .regions()
+      .then((list) => {
+        if (!cancelled) setRegions(list);
+      })
+      .catch(() => {
+        if (!cancelled) setRegions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** 省候选：不限 + 档案里出现过的省（与卡片「省 · 市」同源，选得到即筛得到） */
+  const provinceOptions = useMemo(
+    () => [{ value: '', label: '不限' }, ...regions.map((region) => ({ value: region.province, label: region.province }))],
+    [regions],
+  );
+
+  /** 市候选跟随所选省；未选省时置空，让 SelectField 置灰并提示「请先选择省份」 */
+  const cityOptions = useMemo(() => {
+    const region = regions.find((item) => item.province === draft.province);
+    if (!region) return [];
+    return [{ value: '', label: '不限' }, ...region.cities.map((city) => ({ value: city, label: city }))];
+  }, [regions, draft.province]);
+
+  /** 换省必须清市：市的候选随省而变，留下旧省的市只会筛出空结果 */
+  const patchProvince = (value: string) =>
+    setDraft((prev) => {
+      const next = { ...prev };
+      if (value === '') delete next.province;
+      else next.province = value;
+      delete next.city;
+      return next;
+    });
 
   /**
    * 标签是唯一的**数组**维度，不能走 patch —— patch 按标量 key 逐个赋值，
@@ -187,6 +230,26 @@ export function SearchPanel({ onApply, onClose }: SearchPanelProps) {
               );
             })}
           </View>
+        </View>
+
+        {/* 地点筛选：省 → 市两级联动，候选来自档案里出现过的「省 → 市」清单 */}
+        <View style={{ width: fieldWidth }}>
+          <SelectField
+            label="省份"
+            options={provinceOptions}
+            value={draft.province ?? ''}
+            onChange={patchProvince}
+            placeholder="不限"
+          />
+        </View>
+        <View style={{ width: fieldWidth }}>
+          <SelectField
+            label="城市"
+            options={cityOptions}
+            value={draft.city ?? ''}
+            onChange={(value) => patch('city', value)}
+            placeholder="请先选择省份"
+          />
         </View>
       </ScrollView>
 

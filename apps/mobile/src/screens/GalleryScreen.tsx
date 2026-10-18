@@ -23,15 +23,15 @@
  * 键取 scaleKeyOf、文案取 scaleLabelOf，两视图不可能对同一条边界给出不同答案。
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactElement, ReactNode, RefObject } from 'react';
-import { ActivityIndicator, Animated, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { RefObject } from 'react';
+import { Animated, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { albumApi, searchApi } from '@shaping-memory/sdk';
 import type { PhotoQuery } from '@shaping-memory/sdk';
 import {
   buildTimeGroups,
-  CATEGORIES,
   filterByCategory,
   formatDate,
   photoAspect,
@@ -51,6 +51,8 @@ import { TimelineRail } from '../components/TimelineRail';
 import { useBreakpoint } from '../layout/useBreakpoint';
 import { duration, easing, PRESS_LIFT, PRESS_LIFT_Y, springs } from '../layout/motion';
 import { RAIL_DOCK_H, useWallRail } from '../hooks/useWallRail';
+import { useCategories } from '../hooks/useCategories';
+import { usePrivacyTick } from '../lib/privacy';
 import { Viewer } from './Viewer';
 import {
   accentOpacity,
@@ -190,6 +192,37 @@ const TilePeek = memo(function TilePeek({ photo }: { photo: Photo }) {
 });
 
 /* -------------------------------------------------------------------------- */
+/* 卡面角标：实况（右上）+ 隐私（左上）                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 两种角标与 Web 的 `.photo-card__live` / `.photo-card__lock` 同款同位置：
+ *   · 实况 —— 常驻右上角，是「这张有动态内容」的指示，不随浮层淡入淡出；
+ *   · 隐私 —— 常驻左上角，与实况分居两角（一张照片可以同时是实况且受保护）。
+ *     带角标的照片看到的画面本就是后端给的模糊图，这里只是把「为什么看不清」提前说清。
+ * 抽成一处供墙面 tile 与列表 thumb 共用，避免同一口径被抄两遍。
+ * 【为什么不用 Glass】材质取 Web 同款的 ultra-thick 档；角标面积很小，
+ * 叠一层模糊的收益抵不过每张卡都常驻一个 BlurView 的代价。
+ */
+const TileBadges = memo(function TileBadges({ photo }: { photo: Photo }) {
+  return (
+    <>
+      {photo.isLive ? (
+        <View style={[styles.tileBadge, styles.liveBadge]}>
+          <Icon name="live" size={11} color={colors.accent} />
+          <Text style={styles.liveBadgeText}>实况</Text>
+        </View>
+      ) : null}
+      {photo.privacy && photo.privacy.mode !== 'visible' ? (
+        <View style={[styles.tileBadge, styles.lockBadge]} accessibilityLabel="隐私照片，需要授权查看">
+          <Icon name="lock" size={12} color={colors.accent} />
+        </View>
+      ) : null}
+    </>
+  );
+});
+
+/* -------------------------------------------------------------------------- */
 /* 墙面：卡片（照片本体 + 选择态角标 + 长按浮层）                                 */
 /* -------------------------------------------------------------------------- */
 
@@ -289,6 +322,8 @@ const PhotoTile = memo(function PhotoTile({
             </View>
           ) : null}
           {selecting ? <View style={styles.checkOverlay} /> : null}
+          {/* 实况 / 隐私角标：常驻显示，与选择态角标各自独立（同屏可以既选中又是实况） */}
+          <TileBadges photo={photo} />
 
           {/* 长按浮层：pointerEvents="none" 让手势仍落在 Pressable 上 ——
               点浮层里的照片就是「收掉它」，不必再找一个关闭按钮 */}
@@ -380,14 +415,8 @@ const ColumnWall = memo(function ColumnWall({
   peekId,
   onPeek,
   onDismissPeek,
-  onNeedMore,
-  footer,
 }: WallProps & PeekProps & {
   columns: number;
-  /** 本地渲染窗口已到手上这批数据的尽头时通知父级取下一页；没有下一页时不给 */
-  onNeedMore?: () => void;
-  /** 列表尾注（追加中的转圈 / 失败重试）：跟着内容一起滚，不悬浮 */
-  footer?: ReactNode;
   /** 日尺度：段数翻好几倍，段间距同步收紧（与 Web 的 .masonry--fine 同档） */
   fine: boolean;
   /** 底部是否要让开横轨（最后一行照片不该被停靠条压住） */
@@ -413,6 +442,10 @@ const ColumnWall = memo(function ColumnWall({
   /* 分批窗口：只增不减。photos 变短时 slice 自动截断，无需复位 ——
      复位反而会在切分类的瞬间把已加载的图全部卸载。 */
   const [limit, setLimit] = useState(WALL_BATCH);
+  /* 底部安全区（手势条）高度：App.tsx 不再统一让出底部，内容延伸到手势柄之下，
+     这里把原有让位与手势区高度一起算进滚动底 padding，
+     滚到底时最后一行仍能脱出手势柄与横轨的遮挡 */
+  const insets = useSafeAreaInsets();
   const shown = useMemo(() => takeItems(groups, limit), [groups, limit]);
   /* 已渲染张数：横轨外推「尚未渲染的那些段」的密度靠它。
      必须如实数 shown 的张数，不能拿段的完整张数相加 —— 末段会被 takeItems 截断 */
@@ -430,19 +463,15 @@ const ColumnWall = memo(function ColumnWall({
   const limitRef = useRef(limit);
   limitRef.current = limit;
 
-  /** 距底部不足 WALL_PREFETCH_PX 就放下一批 —— 用户滚动与程序化补批两条路径共用它 */
+  /** 距底部不足 WALL_PREFETCH_PX 就放下一批 —— 用户滚动与程序化补批两条路径共用它。
+      数据已是一次取回的整档，这里只推本地渲染窗口，不涉及任何网络请求 */
   const extendIfNeeded = useCallback(() => {
     const { offset, viewport, content } = geoRef.current;
     if (offset + viewport < content - WALL_PREFETCH_PX) return;
-    // 本地还有没铺出来的段：先把渲染窗口往前放
     if (limitRef.current < totalItems) {
       setLimit((prev) => (prev >= totalItems ? prev : prev + WALL_BATCH));
-      return;
     }
-    /* 已经铺到手上这批数据的尽头：找服务端要下一页。
-       父级的 loadMore 自带串行闸门与「到底就不再取」的判定，重复触达无副作用 */
-    onNeedMore?.();
-  }, [totalItems, onNeedMore]);
+  }, [totalItems]);
 
   /** 同一次滚动要供三处用：横轨算进度、记录几何、分批放下一批 */
   const handleScroll = useCallback(
@@ -490,7 +519,8 @@ const ColumnWall = memo(function ColumnWall({
       contentContainerStyle={[
         styles.listContent,
         fine ? styles.groupGapFine : styles.groupGap,
-        railInset && styles.wallRailInset,
+        // 原「让开横轨」与「让开手势条」合并成一条动态底 padding（见上方 insets 注释）
+        { paddingBottom: (railInset ? RAIL_DOCK_H + space.s64 : space.s40) + insets.bottom },
       ]}
       showsVerticalScrollIndicator={false}
       onScroll={handleScroll}
@@ -529,8 +559,6 @@ const ColumnWall = memo(function ColumnWall({
           </View>
         </View>
       ))}
-      {/* 尾注直接排在最后一段之下：跟着内容一起滚，不悬浮遮挡照片 */}
-      {footer}
     </ScrollView>
   );
 });
@@ -582,6 +610,8 @@ const Thumb = memo(function Thumb({
           </View>
         ) : null}
         {selecting ? <View style={styles.checkOverlay} /> : null}
+        {/* 实况 / 隐私角标：与墙面卡面同一组件、同一口径，两种视图不会给出不同答案 */}
+        <TileBadges photo={photo} />
         {peeking ? (
           <Animated.View style={[styles.peekOverlay, { opacity: peekFade }]} pointerEvents="none">
             <TilePeek photo={photo} />
@@ -617,10 +647,6 @@ interface GroupListProps extends PeekProps {
   onToggleSelect?: (photo: Photo) => void;
   /** 用户开始拖页面：浮层跟着收掉（滚动表示用户已不再关注该卡片） */
   onDragStart: () => void;
-  /** 滑到底自动取下一页；没有下一页时不给 */
-  onEndReached?: () => void;
-  /** 列表尾注（追加中的转圈 / 失败重试）；FlatList 只吃元素，不吃任意节点 */
-  footer?: ReactElement | null;
 }
 
 /**
@@ -639,25 +665,27 @@ function GroupedList({
   onPeek,
   onDismissPeek,
   onDragStart,
-  onEndReached,
-  footer,
 }: GroupListProps) {
+  /* 底部安全区（手势条）高度：与 ColumnWall 同一条口径 —— 内容延伸到手势柄之下，
+     底 padding 补上手势区高度，滚到底时末行不被手势柄压住 */
+  const insets = useSafeAreaInsets();
   return (
     <FlatList
       data={groups}
       keyExtractor={(group) => group.key}
-      contentContainerStyle={[styles.listContent, fine ? styles.groupGapFine : styles.groupGap]}
+      contentContainerStyle={[
+        styles.listContent,
+        fine ? styles.groupGapFine : styles.groupGap,
+        { paddingBottom: space.s40 + insets.bottom },
+      ]}
       showsVerticalScrollIndicator={false}
       onScrollBeginDrag={onDragStart}
-      /* 无感分页：阈值 0.6 屏提前触发；列表本身已虚拟化，再补上「只渲染首屏 +
-         滑出窗口的回收」，长列表滚动才不抖。 */
-      onEndReached={onEndReached}
-      onEndReachedThreshold={0.6}
+      /* 列表已虚拟化：「只渲染首屏 + 滑出窗口的回收」，长列表滚动才不抖。
+         数据是一次取回的整档，无需 onEndReached 续页 */
       initialNumToRender={6}
       maxToRenderPerBatch={6}
       windowSize={7}
       removeClippedSubviews
-      ListFooterComponent={footer}
       renderItem={({ item }) => (
         <View style={styles.wallGroup}>
           {/* 未知时间的残档也走同一条标签：core 的文案已是「未知时间」，不另造一套。
@@ -714,14 +742,8 @@ function useScaleFade(scale: TimeScale) {
 interface GalleryScreenProps {
   photos: readonly Photo[];
   loading: boolean;
-  /** 服务端还有下一页（懒加载分页）；相册/检索态恒为 false —— 那两条路都是一次取回 */
-  hasMore: boolean;
-  /** 正在追加下一页 */
-  loadingMore: boolean;
-  /** 取数错误：列表为空时整块呈现，已有照片时由列表底部呈现并给重试入口 */
+  /** 取数错误：列表为空时整块呈现并给重试入口 */
   error: string | null;
-  /** 触发下一页：滑到列表底部时自动调用，失败后也由「重试」按钮调用 */
-  onLoadMore: () => void;
   view: GalleryView;
   sort: SortOrder;
   /** 时间刻度粒度：月（整份档案的分布）/ 日（逐日精读） */
@@ -747,10 +769,7 @@ interface GalleryScreenProps {
 export function GalleryScreen({
   photos,
   loading,
-  hasMore,
-  loadingMore,
   error,
-  onLoadMore,
   view,
   sort,
   scale,
@@ -770,8 +789,14 @@ export function GalleryScreen({
   /* 列数随窗口宽度走：转屏 / 分屏 / 折叠屏都会让它们变化并触发重排 */
   const { wallColumns, listColumns } = useBreakpoint();
 
+  /* 分类 chip 来自后端（GET /categories）：拉取中或失败时只剩「全部」，
+     筛选条永远可用、不会白屏（与 Web 端 GalleryScreen 同一口径）。 */
+  const categories = useCategories();
+
   /* 相册模式：数据源换成 albumApi.detail(id).photos（顺序由后台 sortOrder 决定）。
-     其余筛选（分类 / 排序 / 视图）行为不变。 */
+     其余筛选（分类 / 排序 / 视图）行为不变。
+     解锁后要重取：相册详情的照片同样由后端按票据决定「给原图还是给模糊图」。 */
+  const privacyTick = usePrivacyTick();
   const [album, setAlbum] = useState<{ title: string; photos: readonly Photo[] } | null>(null);
   const [albumLoading, setAlbumLoading] = useState(false);
   useEffect(() => {
@@ -796,7 +821,7 @@ export function GalleryScreen({
     return () => {
       cancelled = true;
     };
-  }, [albumId]);
+  }, [albumId, privacyTick]);
 
   // 数据源：进了相册就用册内照片，否则用整份档案
   const source = albumId ? album?.photos : photos;
@@ -849,32 +874,8 @@ export function GalleryScreen({
   /* 分段 / 分组一次算完：键与文案都取自 core，两视图不可能对同一条边界给出不同答案 */
   const groups = useMemo(() => buildTimeGroups(ordered, scale), [ordered, scale]);
 
-  /* 分页只在「整份档案」这条路成立：相册与检索态拿到的都是一次取回的完整结果，没有下一页 */
-  const canLoadMore = !albumId && !searching && hasMore;
-
-  /* 列表底部的状态条：追加中转圈 / 失败时给出状态提示 + 重试。
-     出错时**不**自动续取 —— 否则「失败 → 触底 → 再失败」会转成死循环，改为等用户点重试。
-     什么状态都没有时不渲染，免得列表底部凭空多出一段空白。 */
-  const pagerVisible = !albumId && !searching && (loadingMore || !!error);
-  const listFooter = pagerVisible ? (
-    <View style={styles.loadMore}>
-      {loadingMore ? (
-        <ActivityIndicator color={colors.text.tertiary} />
-      ) : (
-        <>
-          <Text style={styles.loadMoreError}>{error}</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="重试加载更多"
-            onPress={onLoadMore}
-            style={({ pressed }) => [styles.editAction, pressed && styles.pressed]}
-          >
-            <Text style={styles.editActionText}>重试</Text>
-          </Pressable>
-        </>
-      )}
-    </View>
-  ) : null;
+  /* 档案一次性取回后没有「下一页」：墙面只管本地分批渲染（WALL_BATCH 窗口），
+     取数错误统一走下方「空列表错误态」的呈现与重试。 */
 
   const [target, setTarget] = useState<ViewerTarget | null>(null);
 
@@ -949,6 +950,23 @@ export function GalleryScreen({
 
   const closeViewer = useCallback(() => setTarget(null), []);
 
+  /* 数据换了（隐私解锁后重拉、切分类、切排序）要同步给查看器 —— target.list 是「打开那一刻」
+     的快照数组，若不同步，背后网格已经重取成清晰的，查看器里却还停在旧的模糊图上（与 Web 端
+     apps/web/src/screens/GalleryScreen.tsx 的同名 effect 同一口径）。同步时按**当前这张的 id**
+     找回它的新下标，人因此不会被换到另一张照片上；若它在新列表里没了（被隐藏、或被筛掉），
+     就改用「原下标夹进合法区间」的保底位置，列表被清空则直接关掉查看器。 */
+  useEffect(() => {
+    setTarget((prev) => {
+      if (!prev) return prev;
+      const current = prev.list[prev.index];
+      if (!current) return prev;
+      const at = ordered.findIndex((photo) => photo.id === current.id);
+      if (at >= 0) return { list: ordered, index: at };
+      if (ordered.length === 0) return null;
+      return { list: ordered, index: Math.min(prev.index, ordered.length - 1) };
+    });
+  }, [ordered]);
+
   /** 切「月 / 日」时给两个视图一次淡入，避免分段整体重切的那一下硬跳 */
   const fadeStyle = useScaleFade(scale);
   const fine = scale === 'day';
@@ -960,7 +978,7 @@ export function GalleryScreen({
           {albumId ? (
             <Chip label={`退出相册 · ${album?.title ?? ''}`} active onPress={onExitAlbum} />
           ) : null}
-          {CATEGORIES.map((item) => (
+          {categories.map((item) => (
             <Chip key={item} label={item} active={item === category} onPress={() => onCategoryChange(item)} />
           ))}
         </ChipRow>
@@ -1052,10 +1070,6 @@ export function GalleryScreen({
             columns={wallColumns}
             fine={fine}
             railInset={railActive}
-            /* 本地渲染窗口已铺到手上这批数据的尽头时，向服务端要下一页。
-               没有下一页（相册 / 检索 / 已到底）就传 undefined，墙面便只管本地分批 */
-            onNeedMore={canLoadMore ? onLoadMore : undefined}
-            footer={listFooter}
             scrollRef={rail.scrollRef}
             onScroll={rail.onScroll}
             onContentSizeChange={rail.onContentSizeChange}
@@ -1076,9 +1090,6 @@ export function GalleryScreen({
             groups={groups}
             columns={listColumns}
             fine={fine}
-            /* 滑到底自动取下一页：阈值 0.6 屏，等真到底再取就已经看到空白了 */
-            onEndReached={canLoadMore ? onLoadMore : undefined}
-            footer={listFooter}
             onPress={openFromList}
             selecting={editing}
             selected={selected}
@@ -1143,8 +1154,6 @@ const styles = StyleSheet.create({
   /* 分段之间的呼吸：与 Web 的 .masonry gap（space-24 / 日尺度 space-16）同档 */
   groupGap: { gap: space.s24 },
   groupGapFine: { gap: space.s16 },
-  /* 横轨浮在页面正下方：最后一段照片要让开「停靠条 + space-64」，否则会被压住 */
-  wallRailInset: { paddingBottom: RAIL_DOCK_H + space.s64 },
 
   filterBar: {
     paddingHorizontal: space.s16,
@@ -1255,6 +1264,34 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     /* 压暗层由背板色派生（不再写死 rgba(0,0,0,.18)）：换主题色时不会留下一块异色 */
     backgroundColor: backgroundRgba(0.18),
+  },
+
+  /* 卡面角标：实况（右上）/ 隐私（左上）。两张共用一层 ultra-thick 材质底，
+     只在位置与尺寸上分开 —— 与 Web 的 .photo-card__live / .photo-card__lock 同口径 */
+  tileBadge: {
+    position: 'absolute',
+    top: space.s8,
+    height: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.full,
+    backgroundColor: colors.material.ultraThick,
+    /* 圆角裁切：实况角标是「图标 + 实况」两段拼接，不裁会露出方角 */
+    overflow: 'hidden',
+  },
+  /* 实况：贴在右上角，图标在左、文字在右，两侧留白按 Web 的左窄右宽 */
+  liveBadge: {
+    right: space.s8,
+    gap: space.s4,
+    paddingLeft: space.s6,
+    paddingRight: space.s8,
+  },
+  liveBadgeText: { ...text.caption, color: colors.text.base, fontWeight: '600' },
+  /* 隐私：贴在左上角（实况占着右上角），正方形圆章、只放一枚锁图标 */
+  lockBadge: {
+    left: space.s8,
+    width: 22,
+    justifyContent: 'center',
   },
   editBar: {
     flexDirection: 'row',

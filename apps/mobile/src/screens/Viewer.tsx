@@ -3,7 +3,7 @@
  *
  * 全屏查看器（模态面）。与 Web 端 apps/web/src/components/Viewer.tsx 同构：
  *   · 当前下标由父级持有，本组件只上报方向（onStep），因此回调引用恒稳；
- *   · EXIF 行来自 @shaping-memory/core 的 exifRows，两端同一份字段顺序；
+ *   · EXIF 分组来自 @shaping-memory/core 的 exifSections，两端同一份分组与字段顺序；
  *   · 渐进显图：先给底片色，原片到达后淡入。
  *
  * 【移动端的必然差异】
@@ -18,7 +18,7 @@
  *     半透明底），默认收起为一行摘要（标题 + 拍摄时间），点击 / 上滑展开完整元数据；
  *   · md（769–899dp）：EXIF 退回照片下方的可折叠抽屉（沿用既有形态）；
  *   · lg（≥ 900dp，与 Web 的 WIDE_MIN 同数）：换成「左舞台 + 右 256dp EXIF 侧栏」。
- *   三档展示的是**同一份完整元数据**（metaRows），只是容器不同。
+ *   三档展示的是**同一份拍摄信息分组**（exifCardSections），只是容器不同。
  *
  * 【全量 EXIF 的权限现实】`GET /photos/:id/exif` 需要 admin/editor：匿名访客拿不到，
  * 因此基础档位只渲染 photo 上与卡面同源的那些字段；登录 admin/editor 后、且元数据
@@ -36,18 +36,20 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import type { TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import {
   approvedTagNames,
   exifRawToText,
-  exifRows,
+  exifSections,
   EXIF_FIELDS,
   formatDate,
   VIEWER_WIDE_MIN_WIDTH,
   VIEWPORT_BREAKPOINTS,
 } from '@shaping-memory/core';
-import type { Photo } from '@shaping-memory/core';
+import type { ExifSection, Photo } from '@shaping-memory/core';
 import { exifApi } from '@shaping-memory/sdk';
 import type { PhotoExifResult } from '@shaping-memory/sdk';
 
@@ -55,9 +57,10 @@ import { Glass, Icon, IconButton } from '../components/primitives';
 import { EditDialog } from '../components/EditDialog';
 import { PhotoMiniMap } from '../components/PhotoMiniMap';
 import { SaveToAlbumButton } from '../components/SaveToAlbumButton';
+import { UnlockDialog } from '../components/UnlockDialog';
 import { ZoomableImage } from '../components/ZoomableImage';
 import { duration, easing, springs, VIEWER_ENTER_SCALE } from '../layout/motion';
-import { colors, fontFamily, radius, size, space, tabularNums, text } from '../theme';
+import { colors, fontFamily, fontSize, fontWeight, metaTracking, radius, size, space, tabularNums, text, accentOpacity, accentRgba } from '../theme';
 
 /** 判定为「翻页」而非「误触」的最小横向位移 */
 const SWIPE_THRESHOLD = 40;
@@ -78,12 +81,42 @@ const EXIF_SIDE_WIDTH = space.s64 * 4;
 const SHEET_MAX_HEIGHT_RATIO = 0.5;
 /** 抽屉的上滑 / 下滑判定：竖向位移超过它才算一次「展开 / 收起」的意图 */
 const SHEET_SWIPE = 24;
+/** 锁面板图标底圆直径：与 Web `.viewer__lockicon` 的 46px 同数（图标字形取 22px） */
+const LOCK_ICON_CIRCLE = 46;
 
 /* -------------------------------------------------------------------------- */
 /* 原片层                                                                      */
 /* -------------------------------------------------------------------------- */
 /* 照片本体与三种手势（双击缩放 / 捏合 / 放大后平移）都在 ZoomableImage 里，
    它在舞台内自适应占位（contain），查看器只负责给它一个舞台。 */
+
+/* -------------------------------------------------------------------------- */
+/* 实况视频层                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 实况照片的内嵌视频：**挂载即播、卸载即停** —— 与 Web「点了播放按钮才挂上来
+ * （卸载即停播，不需要额外暂停逻辑）」同一取舍，播放状态因此只由 liveOn 表达。
+ * 静音 + 循环 + contain：与 Web 的 muted / loop / 内嵌轨比例接近照片、contain 后铺满画框一致。
+ * 关闭原生控件：播放按钮由查看器自己的操作栏给出，与 Web 的自绘控件同一口径。
+ */
+function LiveVideo({ source }: { source: string }) {
+  const player = useVideoPlayer(source, (instance) => {
+    instance.loop = true;
+    instance.muted = true;
+    // 视频层挂上来就是为了「立刻看到动的那一段」，因此创建即播放
+    instance.play();
+  });
+  return (
+    <VideoView
+      style={StyleSheet.absoluteFill}
+      player={player}
+      contentFit="contain"
+      nativeControls={false}
+      allowsFullscreen={false}
+    />
+  );
+}
 
 /* -------------------------------------------------------------------------- */
 /* 完整元数据：一份口径，三个容器共用                                            */
@@ -107,26 +140,20 @@ function fullExifRows(result: PhotoExifResult): MetaRow[] {
 }
 
 /**
- * 查看页的完整元数据行 = `exifRows(photo)` 的全部行 + 卡面上的标题 / 分类 / 标签，
- * 登录 admin/editor 后补拉的全量 EXIF 再追加在后面。
+ * 查看页的拍摄信息分组 = core 的 `exifSections(photo)`（基本信息 / 拍摄参数 / 设备信息），
+ * 与 Web 查看器共用同一份分组、字段顺序与空值裁剪口径；登录 admin/editor 后补拉的
+ * 全量 EXIF 追加为最后一组，其余分组不受影响。
  *
- * 【同名字段去重】先出现的那一条胜出：卡面同源的那份是「展示值」，全量 EXIF 是
- * 「文件里的原始值」，两者同名时展示值优先（否则同一个字段会出现两行、值还不一样）。
  * 【基础档位为什么只有 photo 上的字段】全量 EXIF 接口要 admin/editor，
  * 匿名访客拿不到 —— 不臆造匿名可见的字段，界面自然也不会出现空壳行。
  */
-function metaRows(photo: Photo, full: PhotoExifResult | null): MetaRow[] {
-  const rows: MetaRow[] = [['标题', photo.title], ...exifRows(photo)];
-  /* 标签是本组件额外补充的一行（不在 exifRows 的固定表里），没有标签就不落这一行 ——
-     固定表里那些空值行是「字段存在但没读到」，与「这份档案不含该维度」不是一回事。
-     只取「已生效」的标签：待审的是低置信度猜测，未经人工确认不该出现在访客眼前。
-     注：描述不进这张表 —— 它是一段正文，落成「标签 + 值」的行会被 numberOfLines 截掉，
-     因此单独由 PhotoDescription 整段渲染（见 ExifBody）。 */
-  const tags = approvedTagNames(photo.tags);
-  if (tags.length > 0) rows.push(['标签', tags.map((tag) => `#${tag}`).join(' ')]);
-  if (full) rows.push(...fullExifRows(full));
-  const seen = new Set<string>();
-  return rows.filter(([key]) => (seen.has(key) ? false : (seen.add(key), true)));
+function exifCardSections(photo: Photo, full: PhotoExifResult | null): ExifSection[] {
+  const base = exifSections(photo);
+  if (!full) return base;
+  /* 全量 EXIF 的原始字段不在 core 的分组表里（那张表只认卡面同源字段），
+     因此单独成组追加：展示格式仍是同一种分组，读者不会看到第二套排版 */
+  const rows = fullExifRows(full);
+  return rows.length > 0 ? [...base, { title: '完整 EXIF', chips: [], rows }] : base;
 }
 
 /**
@@ -145,33 +172,67 @@ function PhotoDescription({ text }: { text: string }) {
 }
 
 /**
- * EXIF 卡片的正文 = **描述**（有就落）+ **拍摄位置小地图**（有 GPS 才落）+ 元数据行。
+ * 拍摄信息卡片的正文 = **描述**（有就落）+ **拍摄位置小地图**（有 GPS 才落）+
+ * **分组的参数表**（分组标题 + 拍摄参数的图标标签 + 「标签 → 值」行）+ **标签胶囊组**。
  * 三个容器（手机档抽屉 / 底部抽屉 / 侧栏）共用它，因此三档的正文永远一致；
- * 与 Web 端「拍摄信息卡片里先描述、再小地图、最后参数表」是同一处口径。
+ * 与 Web 端「先描述、再小地图、再按基本信息 / 拍摄参数 / 设备信息 / 标签分组」是同一处口径。
  */
-function ExifBody({ photo, rows }: { photo: Photo; rows: readonly MetaRow[] }) {
+function ExifBody({
+  photo,
+  sections,
+  tags,
+}: {
+  photo: Photo;
+  sections: readonly ExifSection[];
+  tags: readonly string[];
+}) {
   return (
     <>
       <PhotoDescription text={photo.description} />
       {photo.gps ? <PhotoMiniMap gps={photo.gps} title={photo.title} /> : null}
-      <MetaRows rows={rows} />
-    </>
-  );
-}
 
-/** 元数据行表：底部抽屉 / 侧栏 / 手机档抽屉三处都用它，内容因此不可能出现不一致 */
-function MetaRows({ rows }: { rows: readonly MetaRow[] }) {
-  return (
-    <>
-      {rows.map(([key, value]) => (
-        <View style={styles.exifRow} key={key}>
-          <Text style={styles.exifKey}>{key}</Text>
-          {/* 完整元数据里有长文本（镜头型号 / 版权），允许折到第二行再截断 */}
-          <Text style={styles.exifValue} numberOfLines={2}>
-            {value}
-          </Text>
+      {sections.map((section) => (
+        <View key={section.title}>
+          <Text style={styles.exifSecTitle}>{section.title}</Text>
+          {/* 拍摄参数的四枚「图标 + 值」标签：等分一行、不在值的长短上换行
+              （与 Web 的 .exif-chips 同为四等分栅格） */}
+          {section.chips.length > 0 ? (
+            <View style={styles.exifChips}>
+              {section.chips.map((chip) => (
+                <View style={styles.exifChip} key={chip.icon}>
+                  <Icon name={chip.icon} size={fontSize.label} color={colors.text.tertiary} />
+                  <Text style={styles.exifChipValue} numberOfLines={1}>
+                    {chip.value}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {section.rows.map(([key, value]) => (
+            <View style={styles.exifRow} key={key}>
+              <Text style={styles.exifRowKey}>{key}</Text>
+              {/* 完整元数据里有长文本（镜头型号 / 版权），允许折到第二行再截断 */}
+              <Text style={styles.exifRowValue} numberOfLines={2}>
+                {value}
+              </Text>
+            </View>
+          ))}
         </View>
       ))}
+
+      {/* 标签单独一组、以胶囊排开（与 Web 的 .exif-tags 同形）；没有已生效标签就不出现 */}
+      {tags.length > 0 ? (
+        <View>
+          <Text style={styles.exifSecTitle}>标签</Text>
+          <View style={styles.exifTags}>
+            {tags.map((name) => (
+              <Text style={styles.exifTag} key={name}>
+                {name}
+              </Text>
+            ))}
+          </View>
+        </View>
+      ) : null}
     </>
   );
 }
@@ -208,8 +269,10 @@ function useFullExif(photoId: string | undefined, enabled: boolean): PhotoExifRe
 interface InspectorProps {
   /** 当前照片：EXIF 正文里的小地图要读它的坐标 */
   photo: Photo;
-  /** 完整元数据行（与 sm 抽屉同一份渲染） */
-  rows: readonly MetaRow[];
+  /** 拍摄信息分组（与 sm 抽屉同一份渲染） */
+  sections: readonly ExifSection[];
+  /** 已生效标签（与 sm 抽屉同一份渲染） */
+  tags: readonly string[];
   /** 展开态由查看器持有：三个容器共用同一个「元数据看没看」的意图 */
   open: boolean;
   onToggle: () => void;
@@ -217,7 +280,7 @@ interface InspectorProps {
   side?: boolean;
 }
 
-function Inspector({ photo, rows, open, onToggle, side = false }: InspectorProps) {
+function Inspector({ photo, sections, tags, open, onToggle, side = false }: InspectorProps) {
   return (
     <Glass corner="xl" style={[styles.inspector, side && styles.inspectorSide]}>
       <Pressable
@@ -245,7 +308,7 @@ function Inspector({ photo, rows, open, onToggle, side = false }: InspectorProps
           contentContainerStyle={styles.exifBody}
           nestedScrollEnabled
         >
-          <ExifBody photo={photo} rows={rows} />
+          <ExifBody photo={photo} sections={sections} tags={tags} />
         </ScrollView>
       ) : null}
     </Glass>
@@ -258,7 +321,8 @@ function Inspector({ photo, rows, open, onToggle, side = false }: InspectorProps
 
 interface MetaSheetProps {
   photo: Photo;
-  rows: readonly MetaRow[];
+  sections: readonly ExifSection[];
+  tags: readonly string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -271,7 +335,7 @@ interface MetaSheetProps {
  * 【抽屉里的滚动为什么不会带着照片走】照片层完全没有滚动容器，抽屉里只有自己的
  * ScrollView（nestedScrollEnabled）—— 等价于 Web 的 `overscroll-behavior: contain`。
  */
-function MetaSheet({ photo, rows, open, onOpenChange }: MetaSheetProps) {
+function MetaSheet({ photo, sections, tags, open, onOpenChange }: MetaSheetProps) {
   const { height } = useWindowDimensions();
 
   /* 上滑展开 / 下滑收起：只在明显竖向滑动时接管手势（与横滑翻页的判定同一条思路） */
@@ -318,7 +382,7 @@ function MetaSheet({ photo, rows, open, onOpenChange }: MetaSheetProps) {
 
       {open ? (
         <ScrollView style={styles.sheetScroll} contentContainerStyle={styles.exifBody} nestedScrollEnabled>
-          <ExifBody photo={photo} rows={rows} />
+          <ExifBody photo={photo} sections={sections} tags={tags} />
         </ScrollView>
       ) : null}
     </Glass>
@@ -367,6 +431,13 @@ export function Viewer({
   const photo = list[index];
   /** 编辑对话框是否展开（仅 admin） */
   const [editing, setEditing] = useState(false);
+  /**
+   * 实况播放中：默认关着 —— 实况是「主动唤起」的内容，
+   * 打开查看器即自动播放会让用户分不清所看的是照片还是视频（与 Web 同一取舍）。
+   */
+  const [liveOn, setLiveOn] = useState(false);
+  /** 密码解锁面板是否展开 */
+  const [unlockOpen, setUnlockOpen] = useState(false);
 
   /* 形态只由宽度决定：≥900 时 EXIF 挪到照片右侧的固定栏里 —— 与 Web 的 WIDE_MIN
      是同一个数（core/layout.ts 的 VIEWER_WIDE_MIN_WIDTH）。高度不参与判断，
@@ -380,8 +451,10 @@ export function Viewer({
   const [metaOpen, setMetaOpen] = useState(wide);
   /** 全量 EXIF 只在「已登录 admin/editor」且「元数据已展开」时才补拉（见 useFullExif） */
   const fullExif = useFullExif(photo?.id, admin && metaOpen);
-  /** 三档共用的一份完整元数据（同名字段已去重） */
-  const rows = useMemo(() => (photo ? metaRows(photo, fullExif) : []), [photo, fullExif]);
+  /** 三档共用的一份拍摄信息分组：口径来自 core 的 exifSections，与 Web 查看器同源 */
+  const sections = useMemo(() => (photo ? exifCardSections(photo, fullExif) : []), [photo, fullExif]);
+  /** 已生效标签：待审的是低置信度猜测，未经人工确认不该出现在访客眼前 */
+  const tags = useMemo(() => (photo ? approvedTagNames(photo.tags) : []), [photo]);
 
   /* 进出场：Modal 自带的 fade 用的是平台时值（既不能从 token 派生，也没法只淡背板），
      所以关掉它自己驱动。两套模型各归各的（规范 §3.9）：空间运动（缩放）走 smooth 弹簧，
@@ -452,6 +525,10 @@ export function Viewer({
   useEffect(() => {
     // 换页即回到缩略图：下一张还没看，不该默认把十几 MB 的原片拉下来
     setOriginal(false);
+    /* 实况播放与解锁面板同样要复位（与 Web 换页时的复位口径一致）：
+       否则翻到下一张还会接着播上一张的视频、或停在上一张的解锁面上。 */
+    setLiveOn(false);
+    setUnlockOpen(false);
   }, [photo?.id]);
 
   const openOriginal = useCallback(() => {
@@ -466,6 +543,8 @@ export function Viewer({
   if (!photo) return null;
 
   const isLiked = liked.has(photo.id);
+  /** 隐私锁：服务端判定这张照片仍需要授权（锁着时不下发原片地址，画出来就是模糊图） */
+  const locked = photo.privacy?.locked ?? false;
 
   return (
     <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={requestClose}>
@@ -545,6 +624,43 @@ export function Viewer({
                   {/* key 挂在照片 id + 原图态上：换片或切换原图都重挂 ZoomableImage，
                       缩放与位移自然复位（看原图时不该沿用缩略图上的放大位置） */}
                   <ZoomableImage key={`${photo.id}:${original ? 'o' : 't'}`} photo={photo} original={original} />
+
+                  {/* 实况视频：点了播放按钮才挂上来（卸载即停播，不需要额外暂停逻辑），
+                      叠在照片之上；内嵌轨比例与照片接近，contain 后正好铺满舞台 */}
+                  {liveOn && photo.liveUrl ? <LiveVideo source={photo.liveUrl} /> : null}
+
+                  {/* 实况播放按钮：只在这张确实有内嵌视频、且未被锁住时出现，
+                      与 Web「按钮移到照片右下角」同一位置口径 —— 主动交互控件，单独成层 */}
+                  {photo.isLive && photo.liveUrl && !locked ? (
+                    <View style={styles.liveBtn}>
+                      <IconButton
+                        name={liveOn ? 'pause' : 'play'}
+                        label={liveOn ? '结束实况播放' : '播放实况'}
+                        active={liveOn}
+                        glass
+                        onPress={() => setLiveOn((on) => !on)}
+                      />
+                    </View>
+                  ) : null}
+
+                  {/* 锁面板：压在服务端给的模糊图之上，把「为什么看不清」说清楚，
+                      并给出唯一一条出路 —— 输入密码。锁着时不显示任何原图元素 */}
+                  {locked ? (
+                    <View style={styles.lock}>
+                      <View style={styles.lockIcon}>
+                        <Icon name="lock" size={22} color={colors.accent} />
+                      </View>
+                      <Text style={styles.lockText}>这张照片已设为隐私，需要授权后查看</Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="输入密码解锁"
+                        onPress={() => setUnlockOpen(true)}
+                        style={({ pressed }) => [styles.lockBtn, pressed && styles.lockBtnPressed]}
+                      >
+                        <Text style={styles.lockBtnText}>输入密码解锁</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
                 </View>
                 {/* 左右箭头贴在照片区两侧中线：滑动之外再给一个明确的可点入口。
                     触屏没有 hover，Web「默认 opacity:0、悬停才显形」的分支在这里不成立，
@@ -572,11 +688,12 @@ export function Viewer({
             </View>
 
             {sm ? (
-              <MetaSheet photo={photo} rows={rows} open={metaOpen} onOpenChange={setMetaOpen} />
+              <MetaSheet photo={photo} sections={sections} tags={tags} open={metaOpen} onOpenChange={setMetaOpen} />
             ) : (
               <Inspector
                 photo={photo}
-                rows={rows}
+                sections={sections}
+                tags={tags}
                 open={metaOpen}
                 onToggle={() => setMetaOpen((prev) => !prev)}
                 side={wide}
@@ -590,6 +707,10 @@ export function Viewer({
         {editing ? (
           <EditDialog photo={photo} onClose={() => setEditing(false)} onChanged={onPhotosChanged} />
         ) : null}
+
+        {/* 密码解锁面板：与编辑对话框同样挂在缩放层之外（它自己是一层 Modal）。
+            解锁成功后 UnlockDialog 会广播一次，主列表与相册详情据此重取 —— 与 Web 同一链路 */}
+        {unlockOpen ? <UnlockDialog photo={photo} onClose={() => setUnlockOpen(false)} /> : null}
       </Animated.View>
     </Modal>
   );
@@ -640,6 +761,42 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 
+  /** 实况播放按钮：钉在舞台右下角（与 Web 把按钮移到照片右下角同一位置口径） */
+  liveBtn: { position: 'absolute', right: space.s12, bottom: space.s12 },
+
+  /* 锁面板：铺满整个舞台（与 Web 的 `.viewer__lock { inset: 0 }` 同口径）。
+     材质取 Web 同款的 thick 档 —— 刻意不遮满整屏，让人看出「这里确实有张照片，只是看不清」。
+     Web 在此处另叠了一层 backdrop-filter；查看器本身是 RN 模态，模糊采样不到模态外的画面，
+     这里只用材质色（与查看器背板同一取舍，见文件头说明）。 */
+  lock: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.s12,
+    padding: space.s24,
+    backgroundColor: colors.material.thick,
+  },
+  /** 锁图标：accent 淡洗底的圆 + accent 字形（与 Web 的 .viewer__lockicon 同色同径 46/22） */
+  lockIcon: {
+    width: LOCK_ICON_CIRCLE,
+    height: LOCK_ICON_CIRCLE,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: accentRgba(accentOpacity.wash),
+  },
+  lockText: { ...text.meta, textAlign: 'center', color: colors.text.secondary },
+  lockBtn: {
+    height: size.button.md,
+    paddingHorizontal: space.s20,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+  },
+  lockBtnPressed: { opacity: 0.88 },
+  lockBtnText: { ...text.label, color: colors.background, fontWeight: '600' },
+
   caption: { alignItems: 'center', marginBottom: space.s8 },
   captionBox: { paddingHorizontal: space.s16, paddingVertical: space.s8, alignItems: 'center' },
   captionTitle: { ...text.label, fontWeight: '600' },
@@ -664,23 +821,72 @@ const styles = StyleSheet.create({
   /** 侧栏档：吃满整栏剩余高度，超出自己滚 */
   exifScrollSide: { flex: 1 },
   exifBody: {
-    paddingHorizontal: space.s16,
+    /* 与 Web 的卡片内边距同口径：左右 12（各行、标题、描述都吃这一档，
+       卡片自身不再另加横向留白） */
+    paddingHorizontal: space.s12,
+    paddingTop: space.s12,
     paddingBottom: space.s12,
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border.base,
-    paddingTop: space.s8,
   },
-  /* 描述块：与下面的 EXIF 行共用同一条左边距，整段排版（换行原样保留）。
+  /* 描述块：与下面的 EXIF 分组共用同一条左边距，整段排版（换行原样保留）。
      它自己不再限高 —— 长文由外层容器滚动吸收（抽屉 220dp / 侧栏整栏 / 手机档半屏），
      因此描述再长也不会把照片挤出可视区。 */
   descBlock: { paddingTop: space.s4, paddingBottom: space.s8 },
   descLabel: { ...text.meta, color: colors.text.tertiary, marginBottom: space.s4 },
   descText: { ...text.caption, color: colors.text.secondary },
-  exifRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.s6 },
-  exifKey: { ...text.meta, width: 76 },
+
+  /* ---- 拍摄信息分组（与 Web 的 .exif-sec 同构）---- */
+  /* 分组标题：小号三级色 + 字距；上沿留白把本组与上一组分开、下沿只留一格贴近自己的内容 */
+  exifSecTitle: {
+    ...text.caption,
+    color: colors.text.tertiary,
+    fontWeight: String(fontWeight.medium) as TextStyle['fontWeight'],
+    ...metaTracking,
+    paddingTop: space.s12,
+    paddingBottom: space.s6,
+  },
+  /* 拍摄参数的四枚「图标 + 值」标签：等分一行（与 Web 的 .exif-chips 四等分栅格同形） */
+  exifChips: { flexDirection: 'row', gap: space.s4, paddingTop: space.s2, paddingBottom: space.s6 },
+  exifChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.s2,
+    height: size.chip,
+    borderRadius: radius.sm,
+    backgroundColor: colors.fill.tertiary,
+    /* 值过长时省略号收尾，栅格不被撑破 */
+    overflow: 'hidden',
+  },
+  /* 值用等宽字：ISO / 快门这类数字串排在一起时才对齐、也才读得快 */
+  exifChipValue: { ...text.caption, color: colors.text.secondary, fontFamily: fontFamily.mono, flexShrink: 1 },
+  /* 标签胶囊：数量不定，自然宽度 + 自动换行（不像参数那样定宽） */
+  exifTags: { flexDirection: 'row', flexWrap: 'wrap', gap: space.s4, paddingBottom: space.s6 },
+  exifTag: {
+    ...text.caption,
+    color: colors.text.secondary,
+    paddingHorizontal: space.s8,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    backgroundColor: colors.fill.tertiary,
+    overflow: 'hidden',
+  },
+  /* 键值行：标签在左、值在右，行与行之间一条发丝线分段（与 Web 的 .exif-row 同口径） */
+  exifRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.s12,
+    paddingVertical: space.s6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border.base,
+  },
+  exifRowKey: { ...text.meta, flexShrink: 0 },
   /* EXIF 值是数值类信息，与标签不是一类：走等宽族 + 等宽数字，
      与 Web 的 .exif-row__v 同一处口径，逐位比对时不会因字宽跳动而错行 */
-  exifValue: { ...text.caption, flex: 1, textAlign: 'right', fontFamily: fontFamily.mono, ...tabularNums },
+  exifRowValue: { ...text.caption, flexShrink: 1, textAlign: 'right', fontFamily: fontFamily.mono, ...tabularNums },
 
   /* sm 档的底部抽屉：绝对定位钉在主体下缘，因此照片占满整块、抽屉浮在它上面；
      `bottom: 0` 只吃掉收起态一行的高度，展开时才向上长到半屏（限高由 SHEET_MAX_HEIGHT_RATIO 给） */

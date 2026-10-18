@@ -113,9 +113,10 @@ export function WallView({ photos, sort, scale, onOpen, selecting = false, selec
     <div className="wall rail-layout rail-layout--float" ref={rail.containerRef}>
       {/* 正下方居中的横轨：位置交给 .rail-dock（fixed + translateX(-50%)），
           因此它在任何屏宽下都居中，且与页面上其它浮层同处一个层级。
-          mat-thick + glass-neutral 是它压在照片上仍然可读的原因 —— 材质与阴影
-          都取自 token 的 .mat-* / .glass-* 工具类，不在 app.css 里另造一套。 */}
-      <div className="rail-dock mat-thick glass-neutral">
+          mat-ultra-thick + 自定义深色阴影是它压在照片上仍然可读的原因 ——
+          mat-thick（0.72）在浅色页面底色上与背景区分不开，升到 0.86 这档才立得住；
+          阴影不重用 .glass-neutral 的浅配方，由 .rail-dock 自己加深（见 app.css）。 */}
+      <div className="rail-dock mat-ultra-thick">
         <ProgressRail
           progress={rail.progress}
           label={rail.label}

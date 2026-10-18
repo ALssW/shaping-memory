@@ -19,15 +19,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { WebViewMessageEvent } from 'react-native-webview';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { albumApi, searchApi } from '@shaping-memory/sdk';
 import type { PhotoQuery } from '@shaping-memory/sdk';
-import { CATEGORIES, clusterPhotosByZoom, filterByCategory, fromWgs84, hasGps, toWgs84 } from '@shaping-memory/core';
+import { clusterPhotosByZoom, filterByCategory, fromWgs84, hasGps, toWgs84 } from '@shaping-memory/core';
 import type { CoordSystem, Photo, PhotoCluster } from '@shaping-memory/core';
 
 import { Chip, ChipRow } from '../components/primitives';
 import { MapBottomSheet } from '../components/MapBottomSheet';
 import { hasSearchConditions, searchInMemory } from '../lib/photo-search';
 import { useBreakpoint } from '../layout/useBreakpoint';
+import { useCategories } from '../hooks/useCategories';
+import { usePrivacyTick } from '../lib/privacy';
 import { backgroundRgba, blurCss, colors, elevationCssShadow, radius, space, text, textRgba } from '../theme';
 import { Viewer } from './Viewer';
 
@@ -281,6 +284,8 @@ export function MapScreen({
   onToggleLike,
 }: MapScreenProps) {
   const { tier } = useBreakpoint();
+  /* 底部安全区（手势条）高度：地图延伸到手势柄之下（见 App.tsx），署名要抬出手柄区 */
+  const insets = useSafeAreaInsets();
   /* 聚类格边长（屏幕像素，见 core/map-cluster）：竖屏收窄到 56 —— 同样的物理屏幕里
      少一格就少一个标记，手指也更容易点中 */
   const cellPx = tier === 'sm' ? 56 : 64;
@@ -314,7 +319,12 @@ export function MapScreen({
 
   /* ---------------------------------------------------------------- 数据 */
 
-  /* 相册模式：数据源换成册内照片（顺序由后台 sortOrder 决定） */
+  /* 分类 chip 来自后端（GET /categories）：拉取中或失败时只剩「全部」（与 Web 端 MapScreen 同一口径） */
+  const categories = useCategories();
+
+  /* 相册模式：数据源换成册内照片（顺序由后台 sortOrder 决定）。解锁后要重取 —— 相册详情同样
+     由后端按票据决定「给原图还是给模糊图」，否则地图上会一直钉着解锁前的模糊缩略图。 */
+  const privacyTick = usePrivacyTick();
   const [album, setAlbum] = useState<readonly Photo[] | null>(null);
   const [albumLoading, setAlbumLoading] = useState(false);
   useEffect(() => {
@@ -339,7 +349,7 @@ export function MapScreen({
     return () => {
       cancelled = true;
     };
-  }, [albumId]);
+  }, [albumId, privacyTick]);
 
   /* 服务端检索态：有搜索条件且不在相册模式时启用（相册是整份档案的子集，只能本地筛） */
   const searching = hasSearchConditions(search);
@@ -550,7 +560,7 @@ export function MapScreen({
           {/* 看全部打开时分类 chip 收起：此时它们已经不生效，留着只会误导 */}
           {showAll
             ? null
-            : CATEGORIES.map((item) => (
+            : categories.map((item) => (
                 <Chip key={item} label={item} active={item === category} onPress={() => onCategoryChange(item)} />
               ))}
           <Chip label="看全部" active={showAll} onPress={() => setShowAll((prev) => !prev)} />
@@ -585,8 +595,8 @@ export function MapScreen({
           </View>
         ) : null}
 
-        {/* 署名只是标注：不参与命中，地图右下角仍可正常拖动 */}
-        <View style={styles.creditWrap} pointerEvents="none">
+        {/* 署名只是标注：不参与命中，地图右下角仍可正常拖动；bottom 抬出手势柄遮挡区 */}
+        <View style={[styles.creditWrap, { bottom: space.s4 + insets.bottom }]} pointerEvents="none">
           <Text style={styles.credit}>© 高德</Text>
         </View>
 

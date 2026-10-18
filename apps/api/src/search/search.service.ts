@@ -17,7 +17,7 @@ import type { PrivacyPass } from '../privacy/policy';
 import { DictionaryService, isDictionaryKind } from '../dictionary/dictionary.service';
 import type { ApiDictionaryEntry } from '../dictionary/dictionary.service';
 import { PhotosService } from '../photos/photos.service';
-import type { ApiPhoto, ListFilter } from '../photos/photos.service';
+import type { ApiPhoto, ApiRegion, ListFilter } from '../photos/photos.service';
 import type { PageParams } from '../photos/filter-params';
 
 /** 联想默认返回条数：一屏下拉够用，也不会让首次展开就拉回整份字典 */
@@ -33,6 +33,11 @@ export class SearchService {
   /** 照片检索：筛选条件与分页参数已由控制器解析好（见 filter-params.ts） */
   listPhotos(filter: ListFilter, page: PageParams, pass: PrivacyPass): Promise<ApiPhoto[]> {
     return this.photos.list(filter, page, pass);
+  }
+
+  /** 地点候选（省 → 市）：搜索面板「地点筛选」下拉的数据源 */
+  regions(): Promise<ApiRegion[]> {
+    return this.photos.regions();
   }
 
   /**

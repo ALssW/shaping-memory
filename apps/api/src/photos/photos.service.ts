@@ -6,7 +6,7 @@
  */
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { rm } from 'node:fs/promises';
-import { and, asc, desc, eq, exists, gte, ilike, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import { exifMetadata, media, mediaTags, tags } from '@shaping-memory/db';
 import type { Db, MediaInsert } from '@shaping-memory/db';
@@ -20,6 +20,7 @@ import { APP_CONFIG, DB, OBJECT_STORE } from '../infra.module';
 import { remoteStoreOf } from '../storage-config';
 import { stageOriginal } from '../original-staging';
 import { reverseGeocode } from '../geo/regeo';
+import type { PlaceInfo } from '../geo/regeo';
 import { displayPatchOf, mediaDatePatchOf } from './exif-sync';
 import { hiddenExclusion, privacyContextOf, verdictOf } from '../privacy/policy';
 import type { PrivacyMode, PrivacyPass } from '../privacy/policy';
@@ -28,6 +29,12 @@ import { signGrant } from '../privacy/tokens';
 
 /** 写进图片地址的票据默认寿命：够一次完整浏览，过期后重新解锁即可 */
 const GRANT_TTL_SECONDS = 8 * 3600;
+
+/** 地点候选：一个省与其下的市清单（搜索面板「地点筛选」的数据源） */
+export interface ApiRegion {
+  province: string;
+  cities: string[];
+}
 
 /** 前端消费的照片形状（camelCase），与 packages/core 的 Photo 对应，url 为相对路径 */
 export interface ApiPhoto {
@@ -59,12 +66,15 @@ export interface ApiPhoto {
   temp: string;
   wb: string;
   place: string;
-  /** 拍摄日期（仅到「日」，YYYY-MM-DD）：分组与排序的唯一口径 */
+  /** 省级 / 市级行政区（定位反解的结构化结果）；无定位或反解失败时为空串 */
+  province: string;
+  city: string;
+  /** 拍摄日期（仅到「日」，YYYY-MM-DD）：时间线分组的唯一口径 */
   date: string;
   /**
-   * 精确拍摄时间（EXIF DateTimeOriginal），ISO-8601 字符串；库里没有则 null。
-   * 【与 date 的分工】date 到「日」、承担排序；本字段到「秒」、**不参与排序**，
-   * 只在查看器的拍摄信息里展示（排序口径精确到秒会让同一天内照片的先后随秒跳动）。
+   * 精确拍摄时间（EXIF DateTimeOriginal），ISO-8601 绝对时刻字符串；库里没有则 null。
+   * 【与 date 的分工】date 到「日」、承担时间线分组；本字段到「秒」、是列表的排序键
+   * （默认降序，最新拍摄在前），无精确时间的照片固定排在最后。
    */
   takenAt: string | null;
   likes: number;
@@ -176,8 +186,11 @@ type Row = {
   speed: string | null;
   temp: string | null;
   wb: string | null;
-  /** 拍摄地点（定位反解出的可读地名）；无定位或反解失败时为空 */
+  /** 拍摄地点（定位反解出的「省 · 市」）；无定位或反解失败时为空 */
   place: string | null;
+  /** 省级 / 市级行政区（结构化，供筛选） */
+  province: string | null;
+  city: string | null;
   gpsLat: number | null;
   gpsLon: number | null;
   gpsAlt: number | null;
@@ -215,6 +228,8 @@ const PHOTO_COLUMNS = {
   temp: exifMetadata.temp,
   wb: exifMetadata.wb,
   place: exifMetadata.place,
+  province: exifMetadata.province,
+  city: exifMetadata.city,
   gpsLat: exifMetadata.gpsLat,
   gpsLon: exifMetadata.gpsLon,
   gpsAlt: exifMetadata.gpsAlt,
@@ -278,12 +293,17 @@ export class PhotosService {
 
   async list(filter: ListFilter, page: PageParams, pass: PrivacyPass): Promise<ApiPhoto[]> {
     const ascending = filter.sort === 'asc';
-    /* 次级排序键取 id：capture_at 是 date 列（同一天的照片全部并列），只按它排序时
-       PostgreSQL 对并列行的次序不作保证 —— 分页取第二页时可能与第一页重叠或漏掉几张。
-       加上 id 之后顺序唯一，翻页因此稳定。 */
+    /* 排序键取 taken_at（精确拍摄时间，秒级）：最新拍摄的照片优先展示。
+       【为什么无精确时间的排最后】早期数据 taken_at 为空，两种方向都固定 NULLS LAST，
+       「没有时间」不参与「最新/最旧」的比较，只安静地垫底。
+       【为什么还有 capture_at 与 id】taken_at 为空的那批只有日期可用，按 capture_at 分出先后；
+       最后的 id 兜底保证顺序唯一 —— 并列时 PostgreSQL 不保证稳定次序，
+       分页取第二页可能与第一页重叠或漏张，加上 id 之后翻页必然稳定。
+       【为什么主排序键用 sql 模板】本版本 drizzle 的 asc()/desc() 函数不提供 NULLS 选项，
+       而 PostgreSQL 的 desc 默认 NULLS FIRST，不写明 NULLS LAST 会把无时间的照片排到最前。 */
     const order = ascending
-      ? [asc(media.captureAt), asc(media.id)]
-      : [desc(media.captureAt), desc(media.id)];
+      ? [sql`${media.takenAt} asc nulls last`, asc(media.captureAt), asc(media.id)]
+      : [sql`${media.takenAt} desc nulls last`, desc(media.captureAt), desc(media.id)];
 
     const query = this.db
       .select(PHOTO_COLUMNS)
@@ -334,6 +354,9 @@ export class PhotosService {
       filter.to ? lte(media.captureAt, filter.to) : undefined,
       filter.cam ? eq(exifMetadata.cam, filter.cam) : undefined,
       filter.lens ? eq(exifMetadata.lens, filter.lens) : undefined,
+      // 省 / 市精确匹配（取值来自 /search/regions 的候选；无定位照片省市为空，自然落选）
+      filter.province ? eq(exifMetadata.province, filter.province) : undefined,
+      filter.city ? eq(exifMetadata.city, filter.city) : undefined,
       filter.aperture ? eq(exifMetadata.aperture, filter.aperture) : undefined,
       filter.speed ? eq(exifMetadata.speed, filter.speed) : undefined,
       filter.iso == null ? undefined : eq(exifMetadata.iso, filter.iso),
@@ -371,6 +394,27 @@ export class PhotosService {
         .innerJoin(tags, eq(tags.id, mediaTags.tagId))
         .where(and(eq(mediaTags.mediaId, media.id), eq(tags.name, name))),
     );
+  }
+
+  /**
+   * 地点候选：档案里出现过的「省 → 市」清单，供搜索面板的地点筛选下拉使用。
+   * 只统计反解成功的结构化省/市，与卡片上的「省 · 市」同源 —— 下拉里选得到的，
+   * 检索必然命中；下拉里没有的，说明档案里没有。
+   */
+  async regions(): Promise<ApiRegion[]> {
+    const rows = await this.db
+      .selectDistinct({ province: exifMetadata.province, city: exifMetadata.city })
+      .from(exifMetadata)
+      .where(isNotNull(exifMetadata.province))
+      .orderBy(exifMetadata.province, exifMetadata.city);
+    const byProvince = new Map<string, Set<string>>();
+    for (const row of rows) {
+      if (row.province == null) continue;
+      const cities = byProvince.get(row.province) ?? new Set<string>();
+      if (row.city != null) cities.add(row.city);
+      byProvince.set(row.province, cities);
+    }
+    return [...byProvince].map(([province, cities]) => ({ province, cities: [...cities] }));
   }
 
   async get(id: string, pass: PrivacyPass): Promise<ApiPhoto | null> {
@@ -682,31 +726,36 @@ export class PhotosService {
     return writes;
   }
 
-  /** 以内存里的全量 EXIF 为准回填 DB：展示列 + GPS 列 + 拍摄地点 + extra，并同步拍摄日期 */
+  /** 以内存里的全量 EXIF 为准回填 DB：展示列 + GPS 列 + 拍摄地点（省 / 市）+ extra，并同步拍摄日期 */
   private async syncFromExtra(id: string, fields: ExifFull): Promise<void> {
     const display = displayPatchOf(fields);
     const datePatch = mediaDatePatchOf(fields);
     /* 定位变了，地点必须跟着重解：不同步就会出现「地图上已经挪到上海、卡片还写着深圳」。
        改动坐标是这里唯一会动 gpsLat/gpsLon 的路径，因此只需在这一处刷新。 */
     const place = await this.placeOf(display.gpsLat, display.gpsLon);
+    const placePatch = {
+      place: place?.label ?? null,
+      province: place?.province ?? null,
+      city: place?.city ?? null,
+    };
     if (Object.keys(datePatch).length > 0) {
       await this.db.update(media).set(datePatch).where(eq(media.id, id));
     }
     await this.db
       .insert(exifMetadata)
-      .values({ mediaId: id, ...display, place, extra: fields })
+      .values({ mediaId: id, ...display, ...placePatch, extra: fields })
       .onConflictDoUpdate({
         target: exifMetadata.mediaId,
-        set: { ...display, place, extra: fields },
+        set: { ...display, ...placePatch, extra: fields },
       });
   }
 
   /**
-   * 有定位就反解成可读地名，没有（或清除了定位）就返回 null —— 旧地点必须一起失效，
+   * 有定位就反解成「省 · 市」地名，没有（或清除了定位）就返回 null —— 旧地点必须一起失效，
    * 否则会留下「没有坐标、却还写着某地」的错位数据。
    * 反解失败同样返回 null：地点是展示增强，不该阻断 EXIF 的保存。
    */
-  private async placeOf(lat: number | null, lon: number | null): Promise<string | null> {
+  private async placeOf(lat: number | null, lon: number | null): Promise<PlaceInfo | null> {
     if (lat == null || lon == null) return null;
     return reverseGeocode(this.config.AMAP_KEY, lat, lon);
   }
@@ -766,6 +815,8 @@ export class PhotosService {
       temp: locked ? '' : placeholder(row.temp),
       wb: locked ? '' : placeholder(row.wb),
       place: locked ? '' : placeholder(row.place),
+      province: locked ? '' : placeholder(row.province),
+      city: locked ? '' : placeholder(row.city),
       date: placeholder(row.captureAt),
       // 精确到秒的拍摄时间与 EXIF 同一档：锁定照片不出口，无权者拿不到原片时间线
       takenAt: locked ? null : isoInstant(row.takenAt),

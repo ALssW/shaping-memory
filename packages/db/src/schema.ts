@@ -108,11 +108,18 @@ export const exifMetadata = pgTable('exif_metadata', {
   temp: text('temp'),
   wb: text('wb'),
   /**
-   * 拍摄地点：把下面的 gps_lat / gps_lon 反解成可读地名（如「广东省深圳市南山区」）后落库。
+   * 拍摄地点：把下面的 gps_lat / gps_lon 反解成可读地名后落库，展示格式统一为「省 · 市」。
    * 【为什么要专门存一列而不是每次现解】反解要调高德、有配额与延迟；照片的定位极少变动，
    * 解一次存下来即可 —— 读接口因此不必等网络，地图在外网不可达时旧地名也仍在。
    */
   place: text('place'),
+  /**
+   * 省级 / 市级行政区（GPS 反解的结构化结果）。
+   * 【为什么不只留 place 文本】搜索面板要按省、市筛选 —— 从展示文本里反解出行政区划
+   * 既不可靠（直辖市、境外地名形态各异）也无法建有效查询；结构化两列后筛选即等值匹配。
+   */
+  province: text('province'),
+  city: text('city'),
   /** GPS 纬度（WGS-84，南纬为负）。单独建列而非塞 extra：地图选点与「附近照片」都要能查询 */
   gpsLat: doublePrecision('gps_lat'),
   /** GPS 经度（WGS-84，西经为负） */

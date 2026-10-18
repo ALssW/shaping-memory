@@ -73,15 +73,19 @@ export interface Photo {
   speed: string;
   temp: string;
   wb: string;
-  /** 拍摄地（GPS 反解后的可读地址） */
+  /** 拍摄地（GPS 反解后的可读地址），展示格式统一为「省 · 市」 */
   place: string;
+  /** 省级行政区（GPS 反解的结构化结果）；无定位为空 */
+  province?: string | null;
+  /** 市级行政区（直辖市与省同名时展示层去重）；无定位为空 */
+  city?: string | null;
   /** 拍摄日期，统一 YYYY-MM-DD，便于字符串直接切片分组 */
   date: string;
   /**
-   * 精确拍摄时间（EXIF DateTimeOriginal），ISO-8601 字符串；早期数据可能为空。
-   * 【为什么与 date 并存】date 只到「日」，承担分组与排序；精确到秒的时间**不参与排序**，
-   * 只在查看器的拍摄信息里展示 —— 排序口径一旦精确到秒，同一天内照片的先后
-   * 会随「秒」跳动，与「同一天就是同一批」的阅读直觉不符。
+   * 精确拍摄时间（EXIF DateTimeOriginal），ISO-8601 绝对时刻字符串；早期数据可能为空。
+   * 入库时按中国标准时间（UTC+8）解析，展示层一律按 UTC+8 渲染（见 formatDateTime）。
+   * 【为什么与 date 并存】date 只到「日」，承担时间线分组；taken_at 精确到秒，
+   * 是列表接口的排序键（最新拍摄在前），同一天内的先后也由它决定。
    */
   takenAt?: string | null;
   /** 喜爱数 */

@@ -13,6 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { albumApi, albumGroupApi, shareAlbumUrl } from '@shaping-memory/sdk';
 import type { Album, AlbumGroup } from '@shaping-memory/sdk';
@@ -126,6 +127,9 @@ export function AlbumsScreen({ onOpenAlbum, admin }: AlbumsScreenProps) {
   const [groups, setGroups] = useState<readonly AlbumGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  /* 底部安全区（手势条）高度：内容延伸到手势柄之下（见 App.tsx），
+     列表底 padding 补上手势区高度，滚到底时末行不被手势柄压住 */
+  const insets = useSafeAreaInsets();
   /* 影集卡片与图墙同档：窄屏 2 列、宽屏随断点铺开 */
   const { wallColumns: columns } = useBreakpoint();
 
@@ -288,7 +292,7 @@ export function AlbumsScreen({ onOpenAlbum, admin }: AlbumsScreenProps) {
             </View>
           ) : null}
 
-          <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={[styles.list, { paddingBottom: space.s40 + insets.bottom }]} showsVerticalScrollIndicator={false}>
             {visible.length === 0 ? (
               <Text style={styles.empty}>该分组下暂无影集</Text>
             ) : (

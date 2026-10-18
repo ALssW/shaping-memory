@@ -22,6 +22,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { GestureResponderHandlers } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { RailLabel, RailMark } from '@shaping-memory/core';
 
 import { Glass } from './primitives';
@@ -112,6 +113,9 @@ function MarkLabel({
 }
 
 export function TimelineRail({ label, marks, activeKey, progress, geometry, jumpTo, panHandlers }: TimelineRailProps) {
+  /* 底部安全区（手势条）高度：App.tsx 不再统一让出底部，停靠层要从屏幕最底沿
+     抬升一个手势区高度，否则整条横轨会被手势柄压住 */
+  const insets = useSafeAreaInsets();
   /* 每一年（日尺度下是每一月）只在它的第一枚刻度处落一个大单位标签 */
   const majorMarks = useMemo(() => marks.filter((mark) => mark.isMajor), [marks]);
 
@@ -137,8 +141,10 @@ export function TimelineRail({ label, marks, activeKey, progress, geometry, jump
   const centerX = geometry.viewportW / 2;
 
   return (
-    /* 停靠层：贴页面正下方、水平居中（宽度取 min(1040, 视口 − 48)，与 Web 的 .rail-dock 同构） */
-    <View style={styles.layer} pointerEvents="box-none">
+    /* 停靠层：贴页面正下方、水平居中（宽度取 min(1040, 视口 − 48)，与 Web 的 .rail-dock 同构）。
+       bottom 静态值之上再叠手势区高度 —— 内容已延伸到手势柄之下（见 App.tsx），
+       停靠条必须浮在它上面 */
+    <View style={[styles.layer, { bottom: space.s24 + insets.bottom }]} pointerEvents="box-none">
       <Glass corner="lg" blur="md" style={[styles.dock, { width: geometry.dockW }]}>
         {/* 命中区是整条内容区：任意位置都能拖，与 Web 的横向命中区落在轨根一致。
             滑块与光带也挂在这一层里 —— 它的左上角就是停靠条的内容盒原点（RN 的绝对定位

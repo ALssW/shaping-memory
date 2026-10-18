@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { exifApi, photoApi } from '@shaping-memory/sdk';
 import { CATEGORIES, EXIF_FIELDS, exifFieldsByGroup } from '@shaping-memory/core';
@@ -82,6 +83,8 @@ export function AdminPhotoDetail({ photoId, onClose, onSaved }: AdminPhotoDetail
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /* 底部安全区（手势条）高度：内容延伸到手势柄之下（见 App.tsx），表单底 padding 补上 */
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     let cancelled = false;
@@ -158,7 +161,7 @@ export function AdminPhotoDetail({ photoId, onClose, onSaved }: AdminPhotoDetail
             <Text style={styles.error}>{error}</Text>
           </View>
         ) : photo && fields ? (
-          <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={[styles.body, { paddingBottom: space.s40 + insets.bottom }]} showsVerticalScrollIndicator={false}>
             {photo.cardUrl || photo.url ? (
               <Image source={{ uri: photo.cardUrl ?? photo.url }} style={styles.hero} contentFit="cover" cachePolicy="memory-disk" />
             ) : null}

@@ -16,9 +16,11 @@
  * 输入即联想），定位状态是固定三态。原生 <select>/<datalist> 的面板样式改不动，
  * 与后台不一致，故统一用 Combobox.tsx 里的两个自建下拉。
  */
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DICTIONARY_KINDS } from '@shaping-memory/core';
 import type { DictionaryKind, SearchQuery } from '@shaping-memory/core';
+import { searchApi } from '@shaping-memory/sdk';
+import type { Region } from '@shaping-memory/sdk';
 
 import { ComboBox, SelectMenu } from './Combobox';
 import { Icon } from './Icon';
@@ -93,6 +95,24 @@ interface SearchPanelProps {
 export function SearchPanel({ onApply, onClose }: SearchPanelProps) {
   const [draft, setDraft] = useState<SearchQuery>(EMPTY);
 
+  /* 省市候选（档案里出现过的「省 → 市」，来源 /search/regions）：两个下拉共用一份，
+     面板挂载即拉取；卸载后的响应要拦掉，避免面板反复开合时写已卸载的组件。 */
+  const [regions, setRegions] = useState<readonly Region[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    searchApi
+      .regions()
+      .then((list) => {
+        if (!cancelled) setRegions(list);
+      })
+      .catch(() => {
+        if (!cancelled) setRegions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const patch = (key: keyof SearchQuery, value: string | number | boolean | undefined) =>
     setDraft((prev) => {
       const next = { ...prev };
@@ -125,10 +145,58 @@ export function SearchPanel({ onApply, onClose }: SearchPanelProps) {
 
   const gpsValue = draft.hasGps === undefined ? '' : draft.hasGps ? '1' : '0';
 
+  /** 省候选：不限 + 档案里出现过的省（与卡片「省 · 市」同源，选得到即筛得到） */
+  const provinceOptions = useMemo(
+    () => [{ value: '', label: '不限' }, ...regions.map((region) => ({ value: region.province, label: region.province }))],
+    [regions],
+  );
+
+  /** 市候选跟随所选省；未选省时无从谈起，留空让下拉置灰并显示提示文案 */
+  const cityOptions = useMemo(() => {
+    const region = regions.find((item) => item.province === draft.province);
+    if (!region) return [];
+    return [{ value: '', label: '不限' }, ...region.cities.map((city) => ({ value: city, label: city }))];
+  }, [regions, draft.province]);
+
+  /** 换省必须清市：市的候选随省而变，留下旧省的市只会筛出空结果 */
+  const patchProvince = (value: string) =>
+    setDraft((prev) => {
+      const next = { ...prev };
+      if (value === '') delete next.province;
+      else next.province = value;
+      delete next.city;
+      return next;
+    });
+
   return (
     <section className="search-panel" role="dialog" aria-label="照片搜索">
       {/* 标签在第一行：它是「先圈大范围、再用 EXIF 抠细节」里的第一步 */}
       <TagFilter value={draft.tags ?? []} onChange={setTags} />
+
+      {/* 地点筛选单独一行（标签行之下、字段栅格之上）：省 → 市两级联动，
+          候选来自档案里出现过的「省 → 市」清单；换省即清市，未选省时市置灰 */}
+      <div className="search-panel__places">
+        <Field label="省份">
+          <SelectMenu
+            ariaLabel="省份"
+            options={provinceOptions}
+            value={draft.province ?? ''}
+            onChange={patchProvince}
+            clearable
+          />
+        </Field>
+        <Field label="城市">
+          <SelectMenu
+            ariaLabel="城市"
+            options={cityOptions}
+            value={draft.city ?? ''}
+            onChange={(raw) => patch('city', raw)}
+            placeholder="请先选择省份"
+            disabled={!draft.province}
+            clearable
+          />
+        </Field>
+      </div>
 
       <div className="search-panel__grid">
         <Field label="关键词">

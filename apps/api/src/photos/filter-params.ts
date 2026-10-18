@@ -106,6 +106,9 @@ export function buildListFilter(query: Record<string, string | string[] | undefi
     to,
     cam: firstOf(query.cam),
     lens: firstOf(query.lens),
+    // 省 / 市：精确匹配，取值来自 /search/regions 的候选（无候选约束，空串即不限）
+    province: firstOf(query.province),
+    city: firstOf(query.city),
     aperture: firstOf(query.aperture),
     speed: firstOf(query.speed),
     iso: parseIso(firstOf(query.iso)),

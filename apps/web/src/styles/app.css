@@ -107,6 +107,11 @@
  * （实测 15px），页头与左轨会跟着重排，而重排是在查看器的半透明背板底下发生的，
  * 读起来就是「一开一关，背后闪一下」。改成把滑块画成透明：占位不变、零重排，
  * 滚动本身由 Viewer 拦掉的滚轮 / 触摸 / 按键输入负责（见其滚动锁）。
+ *
+ * 【画廊模块挂载期间同款处理】画廊的墙面 / 名册 / 横轨都是一整片满幅照片，
+ * 滚动条滑块会压在内容上（is-gallery-module 由 GalleryScreen 挂载期间打标）。
+ * 同样只把滑块画透明：滚动本身仍走浏览器原生滚动，滚轮 / 触摸 / 拖拽一概不受影响，
+ * 只是不再看见那条滚动条；其他模块照常显示。
  * -------------------------------------------------------------------------- */
 html {
   scrollbar-width: thin;
@@ -140,7 +145,9 @@ html {
   }
 
   html.is-viewer-open::-webkit-scrollbar-thumb,
-  html.is-viewer-open::-webkit-scrollbar-thumb:hover {
+  html.is-viewer-open::-webkit-scrollbar-thumb:hover,
+  html.is-gallery-module::-webkit-scrollbar-thumb,
+  html.is-gallery-module::-webkit-scrollbar-thumb:hover {
     background: transparent;
   }
 }
@@ -152,7 +159,8 @@ html {
    支持伪元素的分支里，隐藏交给上面那条 thumb 透明规则（宽度仍是 8px，零重排）；
    标准属性这条只留给 Firefox 这类不支持伪元素的浏览器。 */
 @supports not selector(::-webkit-scrollbar) {
-  html.is-viewer-open {
+  html.is-viewer-open,
+  html.is-gallery-module {
     scrollbar-color: transparent transparent;
   }
 }
@@ -390,6 +398,21 @@ html {
   /* 左右留出与左轨一致的 16px：分类 chip 不再有包裹容器，
      若不留白就会紧贴视口边缘，看起来像少了一格内边距。 */
   padding: var(--space-12) var(--space-16) var(--space-8);
+  /* 「滚过即淡出」需要过渡：is-scrolled 的挂/摘只改 opacity 一个属性，
+     用与交互反馈同档的 base 时长即可。 */
+  transition: opacity var(--motion-duration-base);
+}
+
+/* 滚过阈值后整条工具栏退到半透明：它不消失，仍能用余光确认「工具就在那儿」；
+   指针悬停时立刻恢复不透明 —— 用户**想要**操作它的瞬间它就该清晰可读。
+   不透明度取 0.35：低于此值背景照片会反向透出来，文字读数会跟照片打架。 */
+html.is-scrolled .gallery-toolbar {
+  opacity: 0.35;
+}
+
+html.is-scrolled .gallery-toolbar:hover,
+html.is-scrolled .gallery-toolbar:focus-within {
+  opacity: 1;
 }
 
 /* 排列方式那一组靠右：分类在左、排列与排序在右，读起来是「筛什么 → 怎么看」 */
@@ -500,7 +523,12 @@ html {
   position: fixed;
   left: 50%;
   bottom: var(--space-24);
-  transform: translateX(-50%);
+  /* 整体缩到 85%：视觉高 83px、视觉宽 884px。transform 同时作用于命中区，
+     滑条、按钮、拖拽手势的命中都跟着缩，无需为「看不见的小按钮」单独补偿。
+     transform-origin 钉在底部中心：缩放只改变「向上占用的高度」，
+     底部仍贴着 space-24 的安全区，不会因缩放而飘离原位。 */
+  transform: translateX(-50%) scale(0.85);
+  transform-origin: bottom center;
   z-index: var(--z-inset-chrome);
   width: min(1040px, calc(100vw - var(--space-24) * 2));
   height: var(--rail-dock-h);
@@ -509,6 +537,14 @@ html {
   display: flex;
   align-items: center;
   border-radius: var(--radius-lg);
+  /* 悬浮阴影再加深一档：.glass-neutral 的 6.7% 黑与上一档 0.18/0.14/0.12 在浅色
+     页面底色上都拉不开层次，停靠条会与背景「融」在一起。
+     仍遵循规范 §4.4「深度来自叠加的透明层」——三层不同半径与透明度叠加，
+     不写一道硬阴影；不加 accent tint，与中性玻璃面定位保持一致。 */
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.32),
+    0 12px 28px rgba(0, 0, 0, 0.24),
+    0 4px 10px rgba(0, 0, 0, 0.18);
 }
 
 /* 瀑布流本体 = 一串时间分段自上而下码放（每段 = 一条整行分隔线 + 一个 N 列网格）。
@@ -519,8 +555,10 @@ html {
   display: flex;
   flex-direction: column;
   gap: var(--space-24);
-  /* 底部让开停靠条：横轨浮在页面正下方，最后一行照片若不让位就会被它压住 */
-  padding: var(--space-8) 0 calc(var(--rail-dock-h) + var(--space-64));
+  /* 底部让开停靠条：横轨浮在页面正下方，最后一行照片若不让位就会被它压住。
+     rail-dock 自身用 transform: scale(0.85) 缩到 85%，因此这里也只让 85% 高度，
+     否则墙底会留出一段永远用不上的空白（scale 的视觉占位与 height 不再相等）。 */
+  padding: var(--space-8) 0 calc(var(--rail-dock-h) * 0.85 + var(--space-64));
 }
 
 /* 日尺度（masonry--fine）：分段单位从「月」降到「日」，段数会翻好几倍 ——
@@ -1832,6 +1870,18 @@ html {
   margin-right: auto;
 }
 
+/* 一排摆满时（列表长过窗口，见 Viewer.tsx 的 stripFilled）：取整余量摊进各枚之间的
+   间隙，缩略图正好从页面最左排到页面最右。此时首尾的 auto 外边距必须归零 ——
+   auto 会先把余量吃掉，space-between 就无从均摊了。不满一排仍走上一档居中。 */
+.viewer__stripbox.is-filled {
+  justify-content: space-between;
+}
+
+.viewer__stripbox.is-filled > :first-child,
+.viewer__stripbox.is-filled > :last-child {
+  margin: 0;
+}
+
 .viewer__stripbox::-webkit-scrollbar {
   display: none;
 }
@@ -3057,6 +3107,15 @@ html {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: var(--space-12);
+}
+
+/* 地点筛选：标签行之下、字段栅格之上的独立一行（省 / 市两个筛选框）。
+   列宽与下方字段栅格取同一套模板，纵向看仍是同一套栅格，只是单独占一行。 */
+.search-panel__places {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-12);
+  margin-bottom: var(--space-16);
 }
 
 /* 标签筛选器：搜索面板的第一行（在字段栅格之上）。

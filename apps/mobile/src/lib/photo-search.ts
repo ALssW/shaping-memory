@@ -21,6 +21,8 @@ export function hasSearchConditions(query: PhotoQuery): boolean {
     query.hasGps !== undefined ||
     // 标签也是真检索维度：漏掉它会让「只选标签」被判成无条件 —— 结果是本地过滤把全部照片原样放行
     (query.tags?.length ?? 0) > 0 ||
+    // 省 / 市同样是真检索维度：只选地点时必须走服务端，否则整份档案会被原样放行
+    Boolean(query.province || query.city) ||
     Boolean(query.q || query.from || query.to || query.cam || query.lens || query.aperture || query.speed)
   );
 }

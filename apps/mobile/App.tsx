@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Animated, Image, StyleSheet } from 'react-native';
+import { Animated, Image, Platform, StyleSheet } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { configureApiBase } from '@shaping-memory/sdk';
@@ -40,6 +40,9 @@ if (envApiBase) configureApiBase(envApiBase);
 /* 开屏标记直接用开屏素材本身：原生侧 Expo 会把它缩到 200dp 见方居中显示
    （splash 的 imageWidth 默认值就是 200），JS 侧照同一尺寸渲染，
    原生开屏退场的那一帧才能与这层遮罩严丝合缝地对上 —— 用户只看到「标记淡出」。
+   「居中」这一点依赖 edge-to-edge（见 plugins/withAndroidPatches.js）：原生开屏窗口铺满
+   整屏后，两侧才共用同一个屏幕中心；窗口被系统栏内缩时，原生那张图的中心会高出约半个
+   导航栏高度（小米15 实测 26px），开屏阶段看起来就是「标记偏上」。
    改这里的数值必须连同 app.json 的 splash 与 scripts/generate-brand-assets.mjs 一起改。 */
 const SPLASH_MARK = require('./assets/splash.png');
 const SPLASH_MARK_DP = 200;
@@ -69,10 +72,9 @@ export function App() {
   const [liked, setLiked] = useState<ReadonlySet<string>>(() => new Set());
   // EXIF 搜索条件：顶栏搜索面板「应用」后写入；有值时画廊改走服务端检索
   const [search, setSearch] = useState<PhotoQuery>({});
-  // 整份照片档案在顶层取一次，画廊与影集共用。
-  // 首屏只取一页，滚到底由 GalleryScreen 触发 loadMore；地图要全量点位，见下面的 effect。
-  // 排序方向一并交给它：分页取的是「按该方向排序后的前缀」，只有服务端知道全档的端点在哪儿。
-  const { photos, loading, hasMore, loadingMore, error, loadMore, loadAll, refresh } = usePhotos(filters.sort);
+  // 整份照片档案在顶层取一次（一次性返回，不分页），画廊、影集与地图共用。
+  // 排序方向一并交给服务端：取回的就是「按该方向排序后的整档」。
+  const { photos, loading, error, refresh } = usePhotos(filters.sort);
   // 前台登录态：admin 登录后开放前台编辑能力
   const [session, setSession] = useState<FrontSession | null>(() => currentSession());
   const admin = isFrontAdmin(session);
@@ -151,13 +153,8 @@ export function App() {
     [patchFilters],
   );
 
-  /* 地图要的是「全部点位」（聚类分布），而首屏只取了一页 —— 切到地图时补一份整档。
-     【为什么声明在 usePhotos 之后】同一组件内的 effect 按声明顺序执行，排在后面才能保证
-     「先取第一页、再取整档」，后者代次更晚，不会被前者覆盖；相册模式下地图用的是册内照片，
-     与整档无关，无需额外请求一次。 */
-  useEffect(() => {
-    if (module === 'map' && !filters.albumId) loadAll();
-  }, [module, loadAll, filters.albumId]);
+  /* 地图的「全部点位」不再需要单独取数：档案一次性取回后，photos 恒为整档，
+     地图与画廊、影集看到的自然是同一份数据。 */
 
   /* 模块 → 屏幕：用 switch 而非层层三元，新增模块时只加一个 case */
   let screen: ReactNode;
@@ -195,10 +192,7 @@ export function App() {
         <GalleryScreen
           photos={photos}
           loading={loading}
-          hasMore={hasMore}
-          loadingMore={loadingMore}
           error={error}
-          onLoadMore={loadMore}
           category={filters.category}
           view={filters.view}
           sort={filters.sort}
@@ -220,10 +214,21 @@ export function App() {
 
   return (
     <SafeAreaProvider>
-      {/* 暗色是唯一方案（规范 §1.1）：状态栏亮字配深色背板 */}
-      <StatusBar style="light" />
+      {/* 暗色是唯一方案（规范 §1.1）：状态栏亮字配深色背板。
+          Android 侧刻意不挂载这个组件：RN 的 StatusBar 挂载时会调
+          StatusBarModule.setHidden(false) → WindowUtil.statusBarShow()，
+          后者在 API 30+ 会执行 setDecorFitsSystemWindows(true)，把 MainActivity
+          打开的 edge-to-edge（plugins/withAndroidPatches.js 8 号补丁）又关掉，
+          底部因此留出一条 52px 的窗口底色带（手势条下的黑色残留）。
+          Android 的状态栏外观已完全由主题条目负责（9 号补丁：透明底 + 亮图标），
+          JS 侧无需介入；iOS 不受影响，照常渲染。 */}
+      {Platform.OS === 'ios' ? <StatusBar style="light" /> : null}
       {/* 横屏与刘海屏要让出左右安全区：竖屏时这两个值本就是 0，
-          横屏时刘海会切到侧边，不进 padding 就会被页头与照片压住。 */}
+          横屏时刘海会切到侧边，不进 padding 就会被页头与照片压住。
+          底部刻意不让出：应用是 edge-to-edge（见 plugins/withAndroidPatches.js），
+          导航栏全透明，内容要一直画到屏幕最下沿（照片墙伸到手势柄之下），
+          而不是留一条纯色带。各滚动列表自行在 paddingBottom 里加 insets.bottom，
+          保证滚到底时最后一行仍能脱出手势柄的遮挡。 */}
       <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
         {/* 页头与内容一起进场：只浮内容的话，页头会先钉在上面，与开屏的衔接就断成两截 */}
         <Animated.View style={[styles.shell, { opacity: content, transform: [{ translateY: contentRise }] }]}>

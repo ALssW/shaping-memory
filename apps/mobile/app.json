@@ -23,7 +23,8 @@
         {
           "locationWhenInUsePermission": "塑忆需要访问您的位置信息，用于为照片写入拍摄地点。"
         }
-      ]
+      ],
+      "expo-video"
     ],
     "ios": {
       "supportsTablet": true,

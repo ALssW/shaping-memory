@@ -23,7 +23,6 @@ import { ToolsScreen } from './screens/ToolsScreen';
 import { TopNav } from './components/TopNav';
 import { useHashRoute } from './hooks/useHashRoute';
 import { usePhotos } from './hooks/usePhotos';
-import { usePrivacyTick } from './lib/privacy';
 import { clearSession, currentSession, isFrontAdmin } from './lib/session';
 import type { FrontSession } from './lib/session';
 import { springs } from './lib/motion';
@@ -45,9 +44,8 @@ export function App() {
   // /search/photos 在服务端筛，因此这里不再需要在前端做二次过滤。
   const [search, setSearch] = useState<SearchQuery>({});
   // 整份照片档案在顶层取一次，画廊与影集共用（条件变化会自动重取）。
-  // 首屏只取一页，往下滚由 GalleryScreen 的底部哨兵触发 loadMore；
-  // 地图要的是「全部点位」，它在挂载时自己调 loadAll 取整份。
-  const { photos, loading, hasMore, loadingMore, error, loadMore, loadAll, refresh } = usePhotos(search);
+  // 接口一次性返回全部结果，地图与图墙看到的是同一份完整数据。
+  const { photos, loading, error, refresh } = usePhotos(search);
   // 前台登录态：admin 登录后开放前台编辑能力（编辑保存后 refresh 触发重拉）
   const [session, setSession] = useState<FrontSession | null>(() => currentSession());
   const admin = isFrontAdmin(session);
@@ -79,18 +77,6 @@ export function App() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [route]);
-
-  /* 地图要的是「全部点位」（聚类分布），而首屏只取了一页 —— 进地图时补一份整档。
-     隐私解锁会让 usePhotos 重取第一页，此刻若人正停在地图上，点位会缩回一页，
-     因此把解锁计数也算进依赖，解锁后重新补齐。
-     【为什么声明在 usePhotos 之后、且相册模式下跳过】同一组件内的 effect 按声明顺序执行，
-     排在 usePhotos 后面才能保证「先重取第一页、再取整档」，后者代次更晚，不会被前者覆盖；
-     相册模式下地图用的是册内照片，与整档无关，不必白拉一次。 */
-  const privacyTick = usePrivacyTick();
-  useEffect(() => {
-    if (route === 'map' && !filters.albumId) loadAll();
-    // search 只在面板提交时才换新对象：这时地图也该按新条件重取整档
-  }, [route, loadAll, privacyTick, filters.albumId, search]);
 
   const openAlbum = useCallback(
     (albumId: string) => {
@@ -135,10 +121,7 @@ export function App() {
         <GalleryScreen
           photos={photos}
           loading={loading}
-          hasMore={hasMore}
-          loadingMore={loadingMore}
           error={error}
-          onLoadMore={loadMore}
           filters={filters}
           onFiltersChange={patchFilters}
           search={search}

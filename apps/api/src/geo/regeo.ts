@@ -1,7 +1,8 @@
 /**
  * apps/api/src/geo/regeo.ts
  *
- * 逆地理编码（坐标 → 可读地名）：把照片里的 WGS-84 定位换成「省市区」这样的可读表述。
+ * 逆地理编码（坐标 → 可读地名）：把照片里的 WGS-84 定位换成「省 · 市」这样的可读表述，
+ * 并结构化给出省 / 市两个行政区字段供搜索面板筛选。
  *
  * 【为什么与地名搜索分开放】两者都问高德，但回答的是相反的问题：
  *   place/text   = 名字 → 坐标（用户在地图上搜地点）
@@ -24,14 +25,21 @@ const CACHE_MAX = 500;
 /** 坐标分桶精度：4 位小数约 11 米 —— 省市区在这个尺度上必然一致，配额则显著节省 */
 const BUCKET_DIGITS = 4;
 
+/** 逆解结果：结构化的省 / 市（供筛选）+ 展示标签（「省 · 市」口径） */
+export interface PlaceInfo {
+  /** 展示用地名，格式统一「省 · 市」；两者皆无时回落到高德的 formatted_address（境外坐标常见） */
+  label: string;
+  province: string | null;
+  city: string | null;
+}
+
 /** 坐标桶 → 已解出的地名；只增不减，超过 CACHE_MAX 时整体清空 */
-const placeCache = new Map<string, string>();
+const placeCache = new Map<string, PlaceInfo>();
 
 /** 高德 regeo 的地址组成（只声明用得到的字段） */
 interface AmapRegeoComponent {
   province?: string | string[];
   city?: string | string[];
-  district?: string | string[];
 }
 
 /** 高德 geocode/regeo 的响应外壳 */
@@ -52,25 +60,26 @@ function text(value: string | string[] | undefined): string {
 }
 
 /**
- * 拼「省 市 区」（无分隔符，符合中文地名的书写习惯）。
- * 直辖市会返回 province=北京市、city=北京市，不去重就会拼成「北京市北京市朝阳区」。
- * 三者都为空时回落到 formatted_address（境外坐标常见这种形态）。
+ * 构造「省 · 市」口径的逆解结果。
+ * 直辖市会返回 province=北京市、city=北京市，不去重会拼成「北京市 · 北京市」——
+ * 同名时只留一份。市级缺失（省直辖县级行政区等）时只展示省级。
+ * 省、市都为空时回落到 formatted_address（境外坐标常见这种形态），此时无结构化省/市。
  */
-function buildLabel(component: AmapRegeoComponent, fallback: string): string | null {
-  const parts: string[] = [];
-  for (const name of [text(component.province), text(component.city), text(component.district)]) {
-    if (name !== '' && !parts.includes(name)) parts.push(name);
+function buildPlace(component: AmapRegeoComponent, fallback: string): PlaceInfo | null {
+  const province = text(component.province) || null;
+  const city = text(component.city) || null;
+  if (province != null || city != null) {
+    const label = province != null && city != null && province !== city ? `${province} · ${city}` : (province ?? city ?? '');
+    return { label, province, city };
   }
-  const label = parts.join('');
-  if (label !== '') return label;
-  return fallback === '' ? null : fallback;
+  return fallback === '' ? null : { label: fallback, province: null, city: null };
 }
 
 /**
- * 把 WGS-84 坐标反解成可读地名；未配置 key、上游异常、查不到地址一律返回 null。
+ * 把 WGS-84 坐标反解成「省 · 市」地名；未配置 key、上游异常、查不到地址一律返回 null。
  * @param key 高德「Web 服务」key（由调用方从配置注入，本模块不读环境变量）
  */
-export async function reverseGeocode(key: string, lat: number, lon: number): Promise<string | null> {
+export async function reverseGeocode(key: string, lat: number, lon: number): Promise<PlaceInfo | null> {
   const trimmedKey = key.trim();
   if (trimmedKey === '') {
     console.warn('[geo] 未配置 AMAP_KEY，拍摄地点反解不可用');
@@ -112,10 +121,10 @@ export async function reverseGeocode(key: string, lat: number, lon: number): Pro
   }
 
   const regeocode = body.regeocode;
-  const label = buildLabel(regeocode?.addressComponent ?? {}, text(regeocode?.formatted_address));
-  if (label === null) return null;
+  const place = buildPlace(regeocode?.addressComponent ?? {}, text(regeocode?.formatted_address));
+  if (place === null) return null;
 
   if (placeCache.size >= CACHE_MAX) placeCache.clear();
-  placeCache.set(cacheKey, label);
-  return label;
+  placeCache.set(cacheKey, place);
+  return place;
 }

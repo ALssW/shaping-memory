@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { photoApi } from '@shaping-memory/sdk';
 import { CATEGORIES } from '@shaping-memory/core';
@@ -27,6 +28,8 @@ export function AdminPhotos() {
   const [category, setCategory] = useState('全部');
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [detailId, setDetailId] = useState<string | null>(null);
+  /* 底部安全区（手势条）高度：内容延伸到手势柄之下（见 App.tsx），列表底 padding 补上 */
+  const insets = useSafeAreaInsets();
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -137,7 +140,7 @@ export function AdminPhotos() {
         <FlatList
           data={photos}
           keyExtractor={(p) => p.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: space.s40 + insets.bottom }]}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <Pressable

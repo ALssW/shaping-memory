@@ -11,6 +11,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PANEL_TOOL_REGISTRY, TOOL_REGISTRY } from '@shaping-memory/core';
 import type { PanelToolDef, ToolDef, ToolField } from '@shaping-memory/core';
 
@@ -138,10 +139,12 @@ function ToolCard({ tool }: { tool: ToolDef }) {
 export function ToolsScreen() {
   /* 面板型工具打开的是全屏工作台（目前只有 EXIF 编辑）：存 key，关掉即卸载 */
   const [panel, setPanel] = useState<string | null>(null);
+  /* 底部安全区（手势条）高度：内容延伸到手势柄之下（见 App.tsx），底 padding 补上 */
+  const insets = useSafeAreaInsets();
 
   return (
     <>
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.screen} contentContainerStyle={[styles.content, { paddingBottom: space.s40 + insets.bottom }]} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>工具</Text>
         <Text style={styles.sub}>拍摄现场用得上的换算，全在本地即时计算</Text>
 

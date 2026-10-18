@@ -9,6 +9,7 @@
  * 按下态靠 style 回调拿到，不需要自己维护一份 pressed state。
  */
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import Feather from '@expo/vector-icons/Feather';
 import type { ComponentProps, ReactNode } from 'react';
 import { memo } from 'react';
@@ -51,15 +52,28 @@ export type IconName =
   | 'plus'
   | 'trash'
   | 'share'
-  | 'pin';
+  | 'pin'
+  /* 拍摄参数四件套：焦距 / 光圈 / 快门 / ISO —— 与 Web 的 Icon name 同名同义
+     （aperture 已在上方） */
+  | 'focus'
+  | 'timer'
+  | 'gauge'
+  /* 隐私锁定与实况播放：与 Web 的 Icon name="lock" / "play" / "pause" 同名同义 */
+  | 'lock'
+  | 'play'
+  | 'pause'
+  /** 实况照片角标：与 Web 的 Icon name="live" 同一语汇（同心圆） */
+  | 'live';
 
 type FeatherName = ComponentProps<typeof Feather>['name'];
 
 /**
  * 图标集换成 @expo/vector-icons 的字形（随 expo 一起提供，不必再引 svg 运行时）。
- * 只有实心爱心需要换一个字形族 —— Feather 全是线性图标。
+ * 只有「实心爱心」「同心圆」「拍摄参数三件套」需要换字形族：
+ * 前三者在 Feather 里没有对应形状，后者的自绘 SVG 语汇（对焦框 / 秒表 / 仪表盘）
+ * 在 MDI 里有同义字形 —— 两端因此给出同一枚图标，而非「看着差不多」的替身。
  */
-const GLYPHS: Record<Exclude<IconName, 'heartFilled'>, FeatherName> = {
+const GLYPHS: Record<Exclude<IconName, 'heartFilled' | 'live' | 'focus' | 'timer' | 'gauge'>, FeatherName> = {
   grid: 'grid',
   album: 'image',
   map: 'map',
@@ -93,6 +107,10 @@ const GLYPHS: Record<Exclude<IconName, 'heartFilled'>, FeatherName> = {
   share: 'share-2',
   /* 拍摄地点：与 Web 的 Icon name="pin" 同一枚（地图针脚），地点字段两端同形 */
   pin: 'map-pin',
+  /* 隐私锁定提示 / 实况播放控制：Feather 里有现成字形，与 Web 的图标语义一一对应 */
+  lock: 'lock',
+  play: 'play',
+  pause: 'pause',
 };
 
 interface IconProps {
@@ -103,6 +121,13 @@ interface IconProps {
 
 export function Icon({ name, size: glyphSize = size.icon.default, color = colors.text.base }: IconProps) {
   if (name === 'heartFilled') return <Ionicons name="heart" size={glyphSize} color={color} />;
+  /* 实况角标：MDI 的 record-circle-outline 就是「同心圆」，与 Web 那枚自绘 SVG 同形 */
+  if (name === 'live') return <MaterialCommunityIcons name="record-circle-outline" size={glyphSize} color={color} />;
+  /* 拍摄参数三件套：焦距（四角对焦框 + 中心焦点）/ 快门（秒表）/ ISO（仪表盘），
+     与 Web 的 focus / timer / gauge 三枚自绘 SVG 同一语义 */
+  if (name === 'focus') return <MaterialCommunityIcons name="image-filter-center-focus" size={glyphSize} color={color} />;
+  if (name === 'timer') return <MaterialCommunityIcons name="timer-outline" size={glyphSize} color={color} />;
+  if (name === 'gauge') return <MaterialCommunityIcons name="speedometer" size={glyphSize} color={color} />;
   return <Feather name={GLYPHS[name]} size={glyphSize} color={color} />;
 }
 
@@ -280,8 +305,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.s12,
     borderRadius: radius.full,
   },
-  /** 纯图标项：收窄左右内边距，去掉文字后的间距 */
-  pillItemIcon: { paddingHorizontal: space.s8, gap: 0 },
+  /** 纯图标项：收窄左右内边距（s6）、去掉文字后的间距。
+      顶栏要在一行里放下品牌名 + 5 个导航胶囊 + 2 个图标按钮，
+      30dp 宽的条目会让品牌名被挤掉；收到 26dp 后品牌名才放得下（369dp 屏实测）。 */
+  pillItemIcon: { paddingHorizontal: space.s6, gap: 0 },
   /** 激活态实心 accent：唯一允许「填充 accent」的两种场合之一 */
   pillItemOn: { backgroundColor: colors.accent },
   pillLabelOn: { color: colors.background, fontWeight: '600' },

@@ -203,6 +203,8 @@ function buildPhotoParams(query: PhotoQuery, page: PageQuery = {}): string {
     ['to', query.to],
     ['cam', query.cam],
     ['lens', query.lens],
+    ['province', query.province],
+    ['city', query.city],
     ['aperture', query.aperture],
     ['speed', query.speed],
   ];
@@ -545,6 +547,12 @@ export const dictionaryApi = {
   },
 };
 
+/** 地点候选：一个省与其下的市清单（搜索面板「地点筛选」下拉的数据源） */
+export interface Region {
+  province: string;
+  cities: string[];
+}
+
 export const searchApi = {
   /**
    * 照片多维检索（专用检索入口，公开）。
@@ -556,6 +564,11 @@ export const searchApi = {
     const qs = buildPhotoParams(query, page);
     const photos = await request<Photo[]>(withPrivacy(`/search/photos${qs ? `?${qs}` : ''}`));
     return photos.map(toPhoto);
+  },
+
+  /** 地点候选（公开）：档案里出现过的「省 → 市」清单，地点筛选下拉的数据源 */
+  regions(): Promise<Region[]> {
+    return request<Region[]>('/search/regions');
   },
 
   /** 字典联想（公开）：搜索框「输入即联想」用；q 为空时返回最靠前的一屏 */
