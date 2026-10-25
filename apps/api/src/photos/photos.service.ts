@@ -13,7 +13,7 @@ import type { Db, MediaInsert } from '@shaping-memory/db';
 import { readExifFull } from '@shaping-memory/exif';
 import type { ExifFull, ExifWriteValue } from '@shaping-memory/exif';
 import type { ObjectStore } from '@shaping-memory/storage';
-import { EXIF_TAG_PATTERN, isValidLatLon, parseGpsValue, toWgs84 } from '@shaping-memory/core';
+import { EXIF_TAG_PATTERN, isValidLatLon, parseGpsValue, toChinaIso, toWgs84 } from '@shaping-memory/core';
 import type { CoordSystem, PhotoTag, SearchQuery, TagReviewStatus, TagSource } from '@shaping-memory/core';
 import type { AppConfig } from '@shaping-memory/config';
 import { APP_CONFIG, DB, OBJECT_STORE } from '../infra.module';
@@ -72,7 +72,8 @@ export interface ApiPhoto {
   /** 拍摄日期（仅到「日」，YYYY-MM-DD）：时间线分组的唯一口径 */
   date: string;
   /**
-   * 精确拍摄时间（EXIF DateTimeOriginal），ISO-8601 绝对时刻字符串；库里没有则 null。
+   * 精确拍摄时间（EXIF DateTimeOriginal）：ISO-8601 中国标准时间串（带 +08:00 偏移），
+   * 库里没有则为 null。
    * 【与 date 的分工】date 到「日」、承担时间线分组；本字段到「秒」、是列表的排序键
    * （默认降序，最新拍摄在前），无精确时间的照片固定排在最后。
    */
@@ -166,10 +167,8 @@ type Row = {
   format: string;
   captureAt: string | null;
   /**
-   * 精确拍摄时间。
-   * 【类型与运行时的差异】drizzle 把 timestamptz 声明为 Date，但 node-postgres 驱动
-   * 把该类型的 pg 解析器改成原文透传，运行时拿到的其实是 "2025-10-02 05:47:38+00" 字符串；
-   * 两种形态都交给 isoInstant 归一，因此这里按声明类型写 Date。
+   * 精确拍摄时间（timestamptz）：drizzle 声明为 Date，兼容库内原文形态收进联合类型；
+   * 两种形态都交给 core 的 toChinaIso 归一为 +08:00 的 ISO 串，见 ApiPhoto.takenAt。
    */
   takenAt: Date | string | null;
   orientation: string;
@@ -246,17 +245,7 @@ function toGps(lat: number | null, lon: number | null, alt: number | null): ApiP
 
 const placeholder = (value: string | null | undefined): string => value ?? '';
 
-/**
- * 拍摄时间（Date 或库内原文）→ ISO-8601 字符串；缺值给 null。
- * 【为什么两种形态都要收】drizzle 把 timestamptz 声明为 Date，而 node-postgres 驱动
- * 把该类型的 pg 解析器改成了原文透传 —— 拿到的是 "2025-10-02 05:47:38+00" 这种非标准形态。
- * 前端按浏览器本地时区渲染时必须先有一个确定的绝对时刻，因此两种输入都在这里归一为标准 ISO。
- */
-function isoInstant(raw: Date | string | null): string | null {
-  if (!raw) return null;
-  const parsed = raw instanceof Date ? raw : new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-}
+/* 拍摄时间的出口格式化统一走 core 的 toChinaIso（+08:00 的 ISO 串），口径见 china-time.ts */
 
 /**
  * 从全量 EXIF 里取出定位。
@@ -819,7 +808,7 @@ export class PhotosService {
       city: locked ? '' : placeholder(row.city),
       date: placeholder(row.captureAt),
       // 精确到秒的拍摄时间与 EXIF 同一档：锁定照片不出口，无权者拿不到原片时间线
-      takenAt: locked ? null : isoInstant(row.takenAt),
+      takenAt: locked ? null : toChinaIso(row.takenAt),
       likes: row.likes,
       size: row.orientation === 'portrait' ? 'portrait' : 'landscape',
       url: file('thumbnail'),

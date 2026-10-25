@@ -16,6 +16,7 @@ import { BadRequestException, ConflictException, Inject, Injectable, NotFoundExc
 import { asc, eq, sql } from 'drizzle-orm';
 import { albumGroups, albums } from '@shaping-memory/db';
 import type { Db } from '@shaping-memory/db';
+import { toChinaIso } from '@shaping-memory/core';
 import { DB } from '../infra.module';
 import { albumGroupIdOf, DEFAULT_GROUP_ID, DEFAULT_GROUP_NAME } from './ids';
 
@@ -94,7 +95,7 @@ export class AlbumGroupsService {
       sortOrder: row.sortOrder,
       count: Number(row.count),
       builtin: row.builtin,
-      createdAt: row.createdAt.toISOString(),
+      createdAt: toChinaIso(row.createdAt),
     }));
     this.cachedAt = Date.now();
     return this.cache;
@@ -128,7 +129,7 @@ export class AlbumGroupsService {
     this.invalidate();
 
     const row = await this.requireRow(id);
-    return { id, name: row.name, sortOrder: row.sortOrder, count: 0, builtin: row.builtin, createdAt: row.createdAt.toISOString() };
+    return { id, name: row.name, sortOrder: row.sortOrder, count: 0, builtin: row.builtin, createdAt: toChinaIso(row.createdAt) };
   }
 
   /** 更新分组（改名 / 改排序）；内置分组不可改名 */
@@ -229,7 +230,7 @@ export class AlbumGroupsService {
       sortOrder: row.sortOrder,
       count: 0,
       builtin: row.builtin,
-      createdAt: row.createdAt.toISOString(),
+      createdAt: toChinaIso(row.createdAt),
     };
   }
 }

@@ -15,6 +15,13 @@
       "when": 1792326626152,
       "tag": "0001_silent_frog_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792517712040,
+      "tag": "0002_ordinary_eternals",
+      "breakpoints": true
     }
   ]
 }

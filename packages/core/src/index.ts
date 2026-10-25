@@ -5,6 +5,7 @@
  * 单一事实源，从编译期保证两端功能与内容一致（产品设计方案 §4.1）。
  */
 export * from './types';
+export * from './china-time';
 export * from './mock';
 export * from './dictionary';
 export * from './exposure-presets';

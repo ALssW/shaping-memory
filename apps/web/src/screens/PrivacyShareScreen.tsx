@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { photoAspect, placeholderColors } from '@shaping-memory/core';
+import { chinaWallClock, photoAspect, placeholderColors } from '@shaping-memory/core';
 import type { Photo } from '@shaping-memory/core';
 import { privacyApi } from '@shaping-memory/sdk';
 
@@ -149,9 +149,12 @@ export function PrivacyShareScreen({ token }: PrivacyShareScreenProps) {
   );
 }
 
-/** 到期时间显示成「YYYY-MM-DD HH:mm」：分享页只需快速看出剩余时长，不必精确到秒 */
+/**
+ * 到期时间显示成「YYYY-MM-DD HH:mm」：分享页只需快速看出剩余时长，不必精确到秒。
+ * 接口的到期时间是中国标准时间串（+08:00），直接渲染其中的墙钟字段，
+ * 不经时区换算，不依赖浏览器所在时区。
+ */
 function formatExpiry(iso: string): string {
-  const date = new Date(iso);
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const wall = chinaWallClock(iso);
+  return wall ? `${wall.year}-${wall.month}-${wall.day} ${wall.hour}:${wall.minute}` : iso;
 }

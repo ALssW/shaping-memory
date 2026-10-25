@@ -82,8 +82,9 @@ export interface Photo {
   /** 拍摄日期，统一 YYYY-MM-DD，便于字符串直接切片分组 */
   date: string;
   /**
-   * 精确拍摄时间（EXIF DateTimeOriginal），ISO-8601 绝对时刻字符串；早期数据可能为空。
-   * 入库时按中国标准时间（UTC+8）解析，展示层一律按 UTC+8 渲染（见 formatDateTime）。
+   * 精确拍摄时间（EXIF DateTimeOriginal）；早期数据可能为空。
+   * 接口输出 ISO-8601 中国标准时间串（带 +08:00 偏移，见 china-time.ts）；EXIF 时间
+   * 无时区信息，入库时按中国标准时间（UTC+8）解析，展示层直接渲染串里的墙钟（见 formatDateTime）。
    * 【为什么与 date 并存】date 只到「日」，承担时间线分组；taken_at 精确到秒，
    * 是列表接口的排序键（最新拍摄在前），同一天内的先后也由它决定。
    */

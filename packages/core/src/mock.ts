@@ -9,6 +9,7 @@
  *   - photoAspect / placeholderColors / formatDate：纯展示推导
  */
 import type { Photo, PhotoCategory } from './types';
+import { chinaWallClock } from './china-time';
 
 /** 分类筛选条（对应 categories 表） */
 export const CATEGORIES: readonly string[] = ['全部', '风光', '街拍', '人像', '建筑', '微距', '纪实'];
@@ -151,25 +152,15 @@ export function formatDate(date: string): string {
 
 /**
  * 精确拍摄时间文案，如「2025/10/02 13:43:33」—— 查看器的拍摄信息里必须读到秒。
- * 【为什么固定按中国标准时间渲染】接口给的是 ISO-8601 绝对时刻，而拍摄时间的语义是
- * 「中国标准时间（UTC+8）的墙钟时间」（EXIF 时间无时区信息，入库时已按 UTC+8 解析）。
- * 若跟随浏览器本地时区渲染，海外访客看到的会是换算后的时刻，与快门按下的「墙上时间」
- * 不符；因此统一换算到 UTC+8 再格式化，任何环境下同一张照片的文案都一致。
+ * 【为什么直接渲染墙钟】接口的时间出口统一是中国标准时间（ISO-8601 带 +08:00 偏移，
+ * 见 china-time.ts），串里的数字就是拍摄当时的「墙上时间」。这里只取这些数字拼文案，
+ * 不经 Date 中转、不做时区换算 —— 任何运行环境下同一张照片的文案都一致。
  * 【为什么要回退】早期导入的照片可能没有精确时间，此时退回 date 的日期口径，不留空。
  */
 export function formatDateTime(takenAt: string | null | undefined, date: string): string {
-  if (takenAt) {
-    const parsed = new Date(takenAt);
-    if (!Number.isNaN(parsed.getTime())) {
-      const pad = (value: number): string => String(value).padStart(2, '0');
-      // 绝对时刻平移 +8 小时后按 UTC 读表，等价于东八区读数，且不依赖运行环境时区
-      const wall = new Date(parsed.getTime() + 8 * 60 * 60 * 1000);
-      const day = `${wall.getUTCFullYear()}/${pad(wall.getUTCMonth() + 1)}/${pad(wall.getUTCDate())}`;
-      const clock = `${pad(wall.getUTCHours())}:${pad(wall.getUTCMinutes())}:${pad(wall.getUTCSeconds())}`;
-      return `${day} ${clock}`;
-    }
-  }
-  return formatDate(date);
+  const wall = chinaWallClock(takenAt);
+  if (!wall) return formatDate(date);
+  return `${wall.year}/${wall.month}/${wall.day} ${wall.hour}:${wall.minute}:${wall.second}`;
 }
 
 /** 原始字节数 → 展示文案，如「6.5MB」「1.20GB」；缺值返回空串 */

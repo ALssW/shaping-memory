@@ -28,6 +28,9 @@ import type { ObjectSyncResult, PhotoObjectSource } from '../photo-objects';
 import { cleanupUploadedAssets } from '../local-assets';
 import { createConfiguredStore, remoteStoreOf } from '../storage-config';
 import { inferCategory, inferFormat, inferOrientation, inferTitle, mediaIdOf, parseTakenAt } from './infer';
+/* displayPatchOf 把全量 EXIF 映射成展示列，含 GPS 三列；导入与后台编辑共用这一份口径，
+   避免「后台改坐标、前台卡片读旧值」这类字段漂移。 */
+import { displayPatchOf } from '../photos/exif-sync';
 
 export interface ImportReport {
   total: number;
@@ -164,6 +167,10 @@ export async function importOne(
       ? {}
       : { originalName: options.originalName, originalSize: options.originalSize ?? null }),
   };
+  /* 展示列口径统一走 displayPatchOf：cam/lens/focal 等与编辑回填共用同一份映射，
+     关键是补上 gpsLat/gpsLon/gpsAlt —— 此前只把全量 EXIF 丢进 extra，展示列为空，
+     导致上传后地图与「地点」筛选读不到坐标，只能事后跑 backfill:place 补救。 */
+  const display = options.fields ? displayPatchOf(options.fields) : null;
   const exifRow = {
     mediaId: id,
     cam: exif.cam || null,
@@ -174,6 +181,9 @@ export async function importOne(
     speed: exif.speed || null,
     temp: exif.temp || null,
     wb: exif.wb || null,
+    gpsLat: display?.gpsLat ?? null,
+    gpsLon: display?.gpsLon ?? null,
+    gpsAlt: display?.gpsAlt ?? null,
   };
 
   // 幂等 upsert：主键冲突时更新，避免重复导入产生重复行；set 需剔除主键

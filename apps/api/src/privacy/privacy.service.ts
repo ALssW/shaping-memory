@@ -16,6 +16,7 @@ import * as bcrypt from 'bcryptjs';
 import { media, privacyShares, settings } from '@shaping-memory/db';
 import type { Db } from '@shaping-memory/db';
 import type { AppConfig } from '@shaping-memory/config';
+import { toChinaIso } from '@shaping-memory/core';
 import { APP_CONFIG, DB } from '../infra.module';
 import { PRIVACY_KEYS, readPrivacySettings, asMode, asBlurStrength, BLUR_STRENGTH_MIN, BLUR_STRENGTH_MAX } from './policy';
 import type { PrivacyMode } from './policy';
@@ -237,7 +238,7 @@ export class PrivacyService {
     const remain = Math.max(60, Math.floor((row.expiresAt.getTime() - Date.now()) / 1000));
     return {
       token: this.mint({ role: 'share', ids: row.mediaIds, exp: this.expiry(Math.min(remain, GRANT_TTL_SECONDS)) }),
-      expiresAt: row.expiresAt.toISOString(),
+      expiresAt: toChinaIso(row.expiresAt),
       mediaIds: row.mediaIds,
     };
   }
@@ -275,11 +276,11 @@ export class PrivacyService {
       id: row.id,
       mediaIds: row.mediaIds,
       accessCode: row.accessCode,
-      expiresAt: row.expiresAt.toISOString(),
+      expiresAt: toChinaIso(row.expiresAt),
       revoked: row.revoked,
       expired: row.expiresAt.getTime() <= Date.now(),
       createdBy: row.createdBy,
-      createdAt: row.createdAt.toISOString(),
+      createdAt: toChinaIso(row.createdAt),
       url: `${this.config.WEB_BASE_URL}/#privacy-share?token=${encodeURIComponent(row.id)}`,
     };
   }

@@ -9,6 +9,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { desc } from 'drizzle-orm';
 import { auditLogs } from '@shaping-memory/db';
 import type { Db } from '@shaping-memory/db';
+import { toChinaIso } from '@shaping-memory/core';
 import { DB } from '../infra.module';
 
 /** 一条审计记录（对外形状，与前端 SDK 的 AuditEntry 一一对应） */
@@ -52,7 +53,7 @@ export class AuditService {
       method: row.method,
       path: row.path,
       status: row.status,
-      at: row.at.toISOString(),
+      at: toChinaIso(row.at),
     }));
   }
 }

@@ -10,6 +10,7 @@ import * as bcrypt from 'bcryptjs';
 import { asc, eq, sql } from 'drizzle-orm';
 import { roles, users } from '@shaping-memory/db';
 import type { Db } from '@shaping-memory/db';
+import { toChinaIso } from '@shaping-memory/core';
 import { DB } from '../infra.module';
 
 /** 对外账号形状（与前端 SDK 的 AdminUser 一一对应） */
@@ -59,7 +60,7 @@ export class UsersService {
     const id = 'u_' + createHash('sha1').update(username).digest('hex').slice(0, 16);
     const passwordHash = await bcrypt.hash(dto.password, 10);
     await this.db.insert(users).values({ id, username, passwordHash, roleId: role });
-    return { id, username, role, createdAt: new Date().toISOString() };
+    return { id, username, role, createdAt: toChinaIso(new Date()) };
   }
 
   /** 改角色 / 重置密码（两者可单独改）；operator 是当前操作者的用户名 */
@@ -139,6 +140,6 @@ export class UsersService {
   }
 
   private toApi(row: { id: string; username: string; roleId: string; createdAt: Date }): AdminUser {
-    return { id: row.id, username: row.username, role: row.roleId, createdAt: row.createdAt.toISOString() };
+    return { id: row.id, username: row.username, role: row.roleId, createdAt: toChinaIso(row.createdAt) };
   }
 }

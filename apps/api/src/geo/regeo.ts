@@ -1,8 +1,9 @@
 /**
  * apps/api/src/geo/regeo.ts
  *
- * 逆地理编码（坐标 → 可读地名）：把照片里的 WGS-84 定位换成「省 · 市」这样的可读表述，
- * 并结构化给出省 / 市两个行政区字段供搜索面板筛选。
+ * 逆地理编码（坐标 → 可读地名）：把照片里的 WGS-84 定位换成「广东 · 深圳」这样的可读表述，
+ * 并结构化给出省 / 市两个行政区字段供搜索面板筛选。省、市名一律去行政层级后缀
+ * （「广东省 · 深圳市」→「广东 · 深圳」，见 trimAdminSuffix）。
  *
  * 【为什么与地名搜索分开放】两者都问高德，但回答的是相反的问题：
  *   place/text   = 名字 → 坐标（用户在地图上搜地点）
@@ -25,11 +26,13 @@ const CACHE_MAX = 500;
 /** 坐标分桶精度：4 位小数约 11 米 —— 省市区在这个尺度上必然一致，配额则显著节省 */
 const BUCKET_DIGITS = 4;
 
-/** 逆解结果：结构化的省 / 市（供筛选）+ 展示标签（「省 · 市」口径） */
+/** 逆解结果：结构化的省 / 市（供筛选）+ 展示标签（「省 · 市」分隔、专名去后缀） */
 export interface PlaceInfo {
-  /** 展示用地名，格式统一「省 · 市」；两者皆无时回落到高德的 formatted_address（境外坐标常见） */
+  /** 展示用地名，格式统一「广东 · 深圳」；两者皆无时回落到高德的 formatted_address（境外坐标常见） */
   label: string;
+  /** 省级专名（已去行政层级后缀，如「广东」）；无省级时为 null */
   province: string | null;
+  /** 市级专名（已去行政层级后缀，如「深圳」）；无市级时为 null */
   city: string | null;
 }
 
@@ -60,14 +63,52 @@ function text(value: string | string[] | undefined): string {
 }
 
 /**
+ * 省级 + 地级的行政层级后缀全集（最长优先匹配，不可遗漏）：
+ *   省级：省 / 自治区 / 特别行政区（直辖市名以「市」结尾，由地级后缀覆盖）
+ *   地级：市 / 地区 / 自治州 / 盟
+ * 【为什么只去后缀、不碰专名】「广西壮族自治区」里的「壮族」是专名的一部分而非行政层级字符，
+ * 只有结尾的「自治区」表达行政层级 —— 去后缀即止，其余字符一字不动。
+ * 【为什么必须最长优先】「特别行政区」「自治区」「自治州」都以单字「区 / 州」的形态收尾，
+ * 若先匹配短后缀就会把「香港特别行政」这种残缺名留下来。
+ */
+const ADMIN_SUFFIXES = ['特别行政区', '自治区', '自治州', '地区', '省', '市', '盟'] as const;
+
+/**
+ * 去掉行政区名称结尾的行政层级后缀：「广东省」→「广东」、「延边朝鲜族自治州」→「延边朝鲜族」。
+ * 只按结尾最长匹配去除一次；不含后缀（或削完会成空串）的名称原样返回。
+ */
+export function trimAdminSuffix(name: string): string {
+  for (const suffix of ADMIN_SUFFIXES) {
+    // 名称不能被削成空串：异常短名兜底保留，绝不产出空内容
+    if (name.length > suffix.length && name.endsWith(suffix)) {
+      return name.slice(0, -suffix.length);
+    }
+  }
+  return name;
+}
+
+/**
+ * 「省 · 市」口径的展示地名逐段去后缀：「广东省 · 深圳市」→「广东 · 深圳」。
+ * 分隔符与空段原样保留 —— 历史数据与 buildPlace 的拼出口径共用这一个修剪函数。
+ */
+export function trimPlaceLabel(label: string): string {
+  return label
+    .split(' · ')
+    .map((part) => trimAdminSuffix(part))
+    .join(' · ');
+}
+
+/**
  * 构造「省 · 市」口径的逆解结果。
- * 直辖市会返回 province=北京市、city=北京市，不去重会拼成「北京市 · 北京市」——
+ * 直辖市会返回 province=北京市、city=北京市，不去重会拼成「北京 · 北京」——
  * 同名时只留一份。市级缺失（省直辖县级行政区等）时只展示省级。
  * 省、市都为空时回落到 formatted_address（境外坐标常见这种形态），此时无结构化省/市。
  */
 function buildPlace(component: AmapRegeoComponent, fallback: string): PlaceInfo | null {
-  const province = text(component.province) || null;
-  const city = text(component.city) || null;
+  /* 省、市入列前先去行政层级后缀（见 trimAdminSuffix）：
+     展示与搜索筛选下拉因此都是「广东 / 深圳」口径，不再带「省 / 市」尾巴。 */
+  const province = trimAdminSuffix(text(component.province)) || null;
+  const city = trimAdminSuffix(text(component.city)) || null;
   if (province != null || city != null) {
     const label = province != null && city != null && province !== city ? `${province} · ${city}` : (province ?? city ?? '');
     return { label, province, city };

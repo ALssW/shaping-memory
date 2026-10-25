@@ -2,7 +2,7 @@
   "expo": {
     "name": "塑忆",
     "slug": "shaping-memory",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "default",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#1c1c1e",
@@ -32,6 +32,7 @@
     },
     "android": {
       "package": "cn.alsw.shapingmemory",
+      "versionCode": 2,
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

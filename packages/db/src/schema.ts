@@ -26,6 +26,17 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
+/**
+ * 修改时间列（全表统一口径）：插入时默认当前时间，任何 UPDATE 都自动刷新为最新时刻。
+ * 【为什么抽成一个函数】十余张表共用同一列定义，逐表抄写难免口径漂移；
+ * 这里一次把「插入默认当前时间 + 更新自动刷新」两个语义定死。
+ */
+const updatedAtCol = () =>
+  timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdateFn(() => new Date());
+
 /** 照片主表：一条 = 一张照片（media 行，见产品方案 §7） */
 export const media = pgTable(
   'media',
@@ -90,6 +101,7 @@ export const media = pgTable(
     taggedAt: timestamp('tagged_at', { withTimezone: true }),
     tagAttempts: integer('tag_attempts').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: updatedAtCol(),
   },
   (table) => [index('media_capture_at_idx').on(table.captureAt)],
 );
@@ -133,12 +145,14 @@ export const exifMetadata = pgTable('exif_metadata', {
    * 前台卡片真正消费的字段，保留为实列以便索引与排序，其余一律落在这里。
    */
   extra: jsonb('extra').$type<Record<string, string>>(),
+  updatedAt: updatedAtCol(),
 });
 
 /** 标签：id 直接取标签名（天然去重，省一次反查） */
 export const tags = pgTable('tags', {
   id: text('id').primaryKey(),
   name: text('name').notNull().unique(),
+  updatedAt: updatedAtCol(),
 });
 
 /**
@@ -169,6 +183,7 @@ export const mediaTags = pgTable(
     reviewStatus: text('review_status').notNull().default('approved'),
     /** 这枚标签的落库时间（人工重新编辑标签时会随重建刷新） */
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: updatedAtCol(),
   },
   (table) => [primaryKey({ columns: [table.mediaId, table.tagId] })],
 );
@@ -181,12 +196,14 @@ export const mediaTags = pgTable(
 export const roles = pgTable('roles', {
   id: text('id').primaryKey(),
   name: text('name').notNull().unique(),
+  updatedAt: updatedAtCol(),
 });
 
 /** 权限点：如 photo:write / photo:delete，粒度为「动作」 */
 export const permissions = pgTable('permissions', {
   id: text('id').primaryKey(),
   name: text('name').notNull().unique(),
+  updatedAt: updatedAtCol(),
 });
 
 /** 角色 ↔ 权限 多对多 */
@@ -199,6 +216,7 @@ export const rolePermissions = pgTable(
     permissionId: text('permission_id')
       .notNull()
       .references(() => permissions.id, { onDelete: 'cascade' }),
+    updatedAt: updatedAtCol(),
   },
   (table) => [primaryKey({ columns: [table.roleId, table.permissionId] })],
 );
@@ -212,6 +230,7 @@ export const users = pgTable('users', {
     .notNull()
     .references(() => roles.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: updatedAtCol(),
 });
 
 /* --------------------------------------------------------------------------
@@ -231,6 +250,7 @@ export const categories = pgTable('categories', {
   name: text('name').notNull().unique(),
   /** 前台筛选条的展示顺序，越小越靠前 */
   sortOrder: integer('sort_order').notNull().default(0),
+  updatedAt: updatedAtCol(),
 });
 
 /**
@@ -253,6 +273,7 @@ export const albumGroups = pgTable('album_groups', {
    */
   builtin: boolean('builtin').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: updatedAtCol(),
 });
 
 /**
@@ -271,6 +292,7 @@ export const albums = pgTable('albums', {
   /** 是否公开可见 */
   isPublic: boolean('is_public').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: updatedAtCol(),
 });
 
 /** 相册 ↔ 照片 多对多：sortOrder 由「PUT /albums/:id/media」按数组下标全量重写 */
@@ -284,6 +306,7 @@ export const albumMedia = pgTable(
       .notNull()
       .references(() => media.id, { onDelete: 'cascade' }),
     sortOrder: integer('sort_order').notNull().default(0),
+    updatedAt: updatedAtCol(),
   },
   (table) => [primaryKey({ columns: [table.albumId, table.mediaId] })],
 );
@@ -320,6 +343,7 @@ export const dictionary = pgTable(
     /** 是否内置标准档位：内置值不会被「整理」删除（曝光三要素的常用档） */
     builtin: boolean('builtin').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: updatedAtCol(),
   },
   (table) => [
     // 同一类型下值唯一：整理脚本反复执行只会命中原行，不会堆出重复候选项
@@ -366,6 +390,7 @@ export const auditLogs = pgTable(
     /** 响应状态码：>= 400 即「尝试失败」，同样要留痕 */
     status: integer('status').notNull(),
     at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: updatedAtCol(),
   },
   (table) => [index('audit_logs_at_idx').on(table.at)],
 );
@@ -380,7 +405,8 @@ export const settings = pgTable('settings', {
   /** 设置键，如 privacy.defaultMode / privacy.accessRoles / privacy.passwordHash */
   key: text('key').primaryKey(),
   value: text('value').notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  /** 修改时间口径与其余各表一致：更新时自动刷新（原先是仅默认值的手动列） */
+  updatedAt: updatedAtCol(),
 });
 
 /**
@@ -402,4 +428,5 @@ export const privacyShares = pgTable('privacy_shares', {
   /** 创建者用户名（审计用） */
   createdBy: text('created_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: updatedAtCol(),
 });

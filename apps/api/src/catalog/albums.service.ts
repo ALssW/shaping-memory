@@ -8,6 +8,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import { asc, eq, inArray } from 'drizzle-orm';
 import { albumMedia, albums, media } from '@shaping-memory/db';
 import type { Db } from '@shaping-memory/db';
+import { toChinaIso } from '@shaping-memory/core';
 import { DB } from '../infra.module';
 import { PhotosService } from '../photos/photos.service';
 import type { ApiPhoto } from '../photos/photos.service';
@@ -231,7 +232,7 @@ export class AlbumsService {
       count: stat?.count ?? 0,
       isPublic: row.isPublic,
       groupId: row.groupId,
-      createdAt: row.createdAt.toISOString(),
+      createdAt: toChinaIso(row.createdAt),
     };
   }
 

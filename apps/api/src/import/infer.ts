@@ -15,11 +15,10 @@ export function mediaIdOf(name: string): string {
   return 'm' + createHash('sha1').update(name).digest('hex').slice(0, 20);
 }
 
+/** 标题仅去扩展名，保留原文件名中的下划线、连字符等所有字符，不做任何推断或改写 */
 export function inferTitle(fileName: string): string {
   const base = fileName.replace(/\.[^.]+$/, '');
-  const noMark = base.replace(/_W$/, '');
-  const title = noMark.replace(/[_-]+/g, ' ').trim();
-  return title || base;
+  return base;
 }
 
 export function inferFormat(fileType: string): string {
