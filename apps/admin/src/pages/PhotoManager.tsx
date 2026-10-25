@@ -34,7 +34,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import type { Dayjs } from 'dayjs';
 import type { DictionaryKind, Photo, PhotoTag } from '@shaping-memory/core';
-import { photoApi, searchApi } from '@shaping-memory/sdk';
+import { exifApi, photoApi, searchApi } from '@shaping-memory/sdk';
 
 import { PhotoMetaModal } from '../components/PhotoMetaModal';
 import { ExifDrawer } from '../components/ExifDrawer';
@@ -337,6 +337,8 @@ export function PhotoManager() {
   const [folderUpload, setFolderUpload] = useState(false);
   const [batchMeta, setBatchMeta] = useState(false);
   const [batchExif, setBatchExif] = useState(false);
+  /** 「批量补地名」进行中：按钮转圈并禁用，避免重复提交 */
+  const [backfillingPlace, setBackfillingPlace] = useState(false);
   /** 彻底删除确认弹层的目标清单；null 表示弹层关闭（单张与批量共用同一个入口） */
   const [purgeTargets, setPurgeTargets] = useState<PurgeTarget[] | null>(null);
 
@@ -470,6 +472,23 @@ export function PhotoManager() {
     const chosen = new Set(selectedKeys.map(String));
     openPurge(photos.filter((photo) => chosen.has(photo.id)));
   }, [photos, selectedKeys, openPurge]);
+
+  /**
+   * 批量补地名：为全库「有定位但尚未获取地名」的照片排入异步反解队列。
+   * 作用于整份档案而非选中项，因此与多选状态无关；反解在后台进行，完成后刷新列表可见。
+   */
+  const handlePlaceBackfill = useCallback(async (): Promise<void> => {
+    setBackfillingPlace(true);
+    try {
+      const { queued } = await exifApi.backfillPlaces();
+      if (queued === 0) message.success('所有照片均已获取地名');
+      else message.success(`已为 ${queued} 张照片开始补全地名，请稍后刷新查看`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '批量补全地名失败');
+    } finally {
+      setBackfillingPlace(false);
+    }
+  }, [message]);
 
   /** 批量写操作完成后的统一收尾：清空选中并重拉列表（页面上各处结果都变了） */
   const refreshAfterBatch = useCallback((): void => {
@@ -842,6 +861,11 @@ export function PhotoManager() {
         </Button>
         <Tooltip title="选一个本地文件夹：自动以文件夹名建相册，大文件自动分片、支持断点续传">
           <Button onClick={() => setFolderUpload(true)}>文件夹上传</Button>
+        </Tooltip>
+        <Tooltip title="为全库有定位但尚未获取地名的照片补全地名，反解在后台进行，完成后刷新列表可见">
+          <Button loading={backfillingPlace} onClick={() => void handlePlaceBackfill()}>
+            批量补地名
+          </Button>
         </Tooltip>
         <div className="admin-toolbar__spacer" />
         <span className="t-sec" style={{ fontSize: 12 }}>

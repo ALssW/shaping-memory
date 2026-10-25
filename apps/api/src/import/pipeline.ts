@@ -24,6 +24,7 @@ import type { ObjectStore } from '@shaping-memory/storage';
 import type { AppConfig } from '@shaping-memory/config';
 
 import { uploadPhotoObjects } from '../photo-objects';
+import { enqueuePlaceResolve } from '../geo/place-queue';
 import type { ObjectSyncResult, PhotoObjectSource } from '../photo-objects';
 import { cleanupUploadedAssets } from '../local-assets';
 import { createConfiguredStore, remoteStoreOf } from '../storage-config';
@@ -211,6 +212,12 @@ export async function importOne(
       .update(exifMetadata)
       .set({ extra: options.fields })
       .where(and(eq(exifMetadata.mediaId, id), isNull(exifMetadata.extra)));
+  }
+
+  /* 地名异步补录：坐标落库即返回，反解交给后台队列慢慢补（见 geo/place-queue.ts）——
+     高德请求放在这里 await 会把上传拖慢数秒，批量导入更会被放大数百倍。 */
+  if (display?.gpsLat != null && display?.gpsLon != null) {
+    enqueuePlaceResolve(config, db, { mediaId: id, lat: display.gpsLat, lon: display.gpsLon });
   }
 
   return uploadToStore(config, { id, sourcePath, thumbPath, liveVideoPath }, options);

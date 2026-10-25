@@ -7,6 +7,7 @@
 import './env';
 import { loadConfig } from '@shaping-memory/config';
 import { importPhotos } from './import/pipeline';
+import { drainPlaceQueue } from './geo/place-queue';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -31,6 +32,9 @@ async function main(): Promise<void> {
     // eslint-disable-next-line no-console
     console.error(`  - [未上云] ${err}`);
   }
+  /* 地名反解是后台队列（见 geo/place-queue.ts）：进程一退出任务就没了，
+     因此退出前显式排空，保证本次导入的照片都带上地名。 */
+  await drainPlaceQueue();
 }
 
 void main();

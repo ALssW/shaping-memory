@@ -21,6 +21,8 @@ import { remoteStoreOf } from '../storage-config';
 import { stageOriginal } from '../original-staging';
 import { reverseGeocode } from '../geo/regeo';
 import type { PlaceInfo } from '../geo/regeo';
+import { listPlaceBackfillTargets } from '../geo/place-candidates';
+import { enqueuePlaceResolve } from '../geo/place-queue';
 import { displayPatchOf, mediaDatePatchOf } from './exif-sync';
 import { hiddenExclusion, privacyContextOf, verdictOf } from '../privacy/policy';
 import type { PrivacyMode, PrivacyPass } from '../privacy/policy';
@@ -150,6 +152,16 @@ export interface PhotoExifResult {
 export interface OriginalExifResult {
   fields: ExifFull;
   gps: { lat: number; lon: number; alt: number | null } | null;
+}
+
+/**
+ * 手动「获取地名」的返回：定位反解出的展示地名与结构化省 / 市。
+ * 三列皆为 null 表示未解析出地名（此次不写库，原地名保持不变），属正常结果而非错误。
+ */
+export interface PlaceResult {
+  place: string | null;
+  province: string | null;
+  city: string | null;
 }
 
 /** 合法的隐私标记取值：单张编辑与批量编辑共用一份，避免两处校验口径不一致 */
@@ -654,6 +666,41 @@ export class PhotosService {
     } finally {
       await rm(tmpPath, { force: true });
     }
+  }
+
+  /**
+   * 手动「获取地名」：按照片当前坐标（exif_metadata 的 gps 列）同步反解，
+   * 解出后**无条件覆盖** place / province / city —— 重新获取即以最新反解结果为准。
+   *
+   * 【反解失败为什么不动库】未解出地名时保留原地名，仅返回三列 null 由前端提示
+   * 「未解析到地名」；把三列清成 null 会凭空丢掉用户已有的地名，属破坏性副作用。
+   */
+  async resolvePlace(id: string): Promise<PlaceResult> {
+    await this.requireRow(id);
+    const meta = await this.db.query.exifMetadata.findFirst({ where: eq(exifMetadata.mediaId, id) });
+    const lat = meta?.gpsLat ?? null;
+    const lon = meta?.gpsLon ?? null;
+    if (lat == null || lon == null) throw new BadRequestException('这张照片没有定位坐标，无法获取地名');
+
+    const place = await this.placeOf(lat, lon);
+    if (place === null) return { place: null, province: null, city: null };
+
+    await this.db
+      .update(exifMetadata)
+      .set({ place: place.label, province: place.province, city: place.city })
+      .where(eq(exifMetadata.mediaId, id));
+    return { place: place.label, province: place.province, city: place.city };
+  }
+
+  /**
+   * 批量补地名：把「有坐标且地名为空」的照片逐张排入异步反解队列（见 geo/place-queue），
+   * 立即返回入队张数 —— 反解在后台串行进行，调用方不等结果。
+   * 候选判定与查询共用一份（见 geo/place-candidates），队列写库时只补空缺，天然幂等。
+   */
+  async enqueuePlaceBackfill(): Promise<{ queued: number }> {
+    const targets = await listPlaceBackfillTargets(this.db);
+    for (const target of targets) enqueuePlaceResolve(this.config, this.db, target);
+    return { queued: targets.length };
   }
 
   /**

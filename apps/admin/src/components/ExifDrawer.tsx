@@ -28,6 +28,7 @@ import {
   Space,
   Spin,
   Tag,
+  Tooltip,
 } from 'antd';
 import {
   EXIF_EDITABLE_TAGS,
@@ -75,6 +76,8 @@ export function ExifDrawer({ photoId, open, onClose, onSaved }: ExifDrawerProps)
   const [manual, setManual] = useState<{ lat: number | null; lon: number | null }>({ lat: null, lon: null });
   /** 是否请求「清除定位」（提交 gps: null） */
   const [gpsCleared, setGpsCleared] = useState(false);
+  /** 「获取地名」进行中：按钮转圈并禁用，避免重复提交 */
+  const [placeResolving, setPlaceResolving] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>('amap');
   const [customTags, setCustomTags] = useState<CustomTagRow[]>([]);
   /** 「查看原片 EXIF」只读弹窗：开关、加载态、结果 */
@@ -143,6 +146,33 @@ export function ExifDrawer({ photoId, open, onClose, onSaved }: ExifDrawerProps)
     setManual({ lat: null, lon: null });
     setGpsCleared(true);
   }, []);
+
+  /**
+   * 「获取地名」：按照片**已保存**的定位同步反解并覆盖地名三列（表单里未保存的选点不算）。
+   * 结果就地回显而不重拉整份 EXIF —— 重拉会把正在编辑、尚未保存的表单改动冲掉。
+   */
+  const handleResolvePlace = useCallback(async () => {
+    if (!photoId) return;
+    setPlaceResolving(true);
+    try {
+      const result = await exifApi.resolvePlace(photoId);
+      const label = result.place;
+      // 后端把「反解不到」表达为三列 null（此时未覆盖库中地名），属正常结果而非错误
+      if (label == null) {
+        message.info('未解析到地名');
+        return;
+      }
+      // 合并只动地名三列：其余字段（含正在编辑的表单）保持原样
+      setExif((prev) =>
+        prev ? { ...prev, photo: { ...prev.photo, place: label, province: result.province, city: result.city } } : prev,
+      );
+      message.success(`已获取拍摄地名：${label}`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '获取地名失败，请稍后重试');
+    } finally {
+      setPlaceResolving(false);
+    }
+  }, [photoId, message]);
 
   const handleClearField = useCallback(
     (tag: string) => {
@@ -306,6 +336,36 @@ export function ExifDrawer({ photoId, open, onClose, onSaved }: ExifDrawerProps)
             手动输入时请填标准 GPS 坐标；也可以直接在地图上选点，坐标会自动换算。
             {gpsCleared && ' 保存后将移除这张照片的定位。'}
           </div>
+
+          {/* 拍摄地：定位反解出的只读结果，仅展示、不可直接编辑；获取入口是右侧按钮 */}
+          <Row align="middle" style={{ marginBottom: 12 }}>
+            <Col span={24}>
+              <Space size={8}>
+                <span className="t-qua">拍摄地</span>
+                <span>{exif?.photo.place || '未获取'}</span>
+                {/* 外层包一层 span：禁用的按钮不触发鼠标事件，
+                    Tooltip 直接挂在按钮上将无法弹出「为什么不可用」的说明 */}
+                <Tooltip
+                  title={
+                    exif?.gps
+                      ? '按照片当前已保存的定位反解拍摄地，并覆盖已有地名'
+                      : '这张照片没有定位坐标，无法获取地名；请先选点并保存定位'
+                  }
+                >
+                  <span>
+                    <Button
+                      size="small"
+                      loading={placeResolving}
+                      disabled={!exif?.gps}
+                      onClick={() => void handleResolvePlace()}
+                    >
+                      获取地名
+                    </Button>
+                  </span>
+                </Tooltip>
+              </Space>
+            </Col>
+          </Row>
           <GpsPicker
             key={photoId ?? 'none'}
             point={gpsPoint}

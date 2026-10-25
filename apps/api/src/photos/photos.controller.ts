@@ -25,7 +25,7 @@ import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import type { MaybeAuthedRequest } from '../auth/optional-jwt.guard';
 import { Roles, RolesGuard } from '../auth/roles.guard';
 import { buildListFilter, parsePage } from './filter-params';
-import { ApiPhoto, OriginalExifResult, PhotoExifResult, PhotosService, UpdateExifDto, UpdatePhotoDto } from './photos.service';
+import { ApiPhoto, OriginalExifResult, PhotoExifResult, PhotosService, PlaceResult, UpdateExifDto, UpdatePhotoDto } from './photos.service';
 import { PurgeService } from './purge.service';
 import type { PurgeResult } from './purge.service';
 
@@ -133,6 +133,29 @@ export class PhotosController {
     @Req() req: MaybeAuthedRequest,
   ): Promise<PhotoExifResult> {
     return this.photos.updateExif(id, payload, await this.photos.pass(req));
+  }
+
+  /**
+   * 批量补地名：为「有坐标且地名为空」的照片逐张排入异步反解队列，返回入队张数。
+   * 【为什么必须声明在 POST /photos/:id/place 之前】Express 按声明顺序匹配路由，
+   * 带字面段的路径要先于带动态 :id 段的路径声明，避免被动态段抢先吃掉（同 @Patch('batch') 的做法）。
+   */
+  @Post('place-backfill')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'editor')
+  async placeBackfill(): Promise<{ queued: number }> {
+    return this.photos.enqueuePlaceBackfill();
+  }
+
+  /**
+   * 手动「获取地名」：按照片当前坐标同步反解并无条件覆盖地名三列。
+   * 反解不到地名时返回三列 null（不算错误、不覆盖库中记录），由前端提示「未解析到地名」。
+   */
+  @Post(':id/place')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'editor')
+  async resolvePlace(@Param('id') id: string): Promise<PlaceResult> {
+    return this.photos.resolvePlace(id);
   }
 
   @Delete(':id')

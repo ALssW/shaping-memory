@@ -617,6 +617,16 @@ export interface OriginalExifResult {
   gps: { lat: number; lon: number; alt: number | null } | null;
 }
 
+/**
+ * 手动「获取地名」的返回：定位反解出的展示地名（「省 · 市」）与结构化省 / 市。
+ * 三列皆为 null 表示未解析出地名（库中地名保持不变），由调用方提示。
+ */
+export interface PhotoPlace {
+  place: string | null;
+  province: string | null;
+  city: string | null;
+}
+
 function toExifResult(raw: RawExifResult): PhotoExifResult {
   return { ...raw, photo: toPhoto(raw.photo) };
 }
@@ -658,6 +668,19 @@ export const exifApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids, ...patch }),
     });
+  },
+
+  /**
+   * 手动「获取地名」（需 admin/editor）：按照片当前定位同步反解并无条件覆盖地名三列。
+   * 返回 place 为 null 即未解析出地名（库中地名未被改动），由调用方提示。
+   */
+  async resolvePlace(id: string): Promise<PhotoPlace> {
+    return request<PhotoPlace>(`/photos/${id}/place`, { method: 'POST' });
+  },
+
+  /** 批量补地名（需 admin/editor）：为「有定位且地名为空」的照片排入异步反解队列，返回入队张数 */
+  async backfillPlaces(): Promise<{ queued: number }> {
+    return request<{ queued: number }>('/photos/place-backfill', { method: 'POST' });
   },
 };
 

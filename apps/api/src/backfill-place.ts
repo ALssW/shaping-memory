@@ -6,19 +6,21 @@
  *      （仅填空缺，不覆盖已有值）—— 早期数据的 GPS 只存在于 EXIF 原文里，
  *      而逆地理与地图读的都是 gps 列，不先落列就没有坐标可反解。
  *   2. 逆地理：把定位反解成「省 · 市」地名写进 place，并落结构化的 province / city
- *      两列（搜索面板的地点筛选读它们）。
+ *      两列（搜索面板的地点筛选读它们）；仅补空缺，已有地名不覆盖 ——
+ *      覆盖语义只属于后台单张「获取地名」，此处与异步队列同为「只补空」口径。
  * 用法：`npm run backfill:place -w @shaping-memory/api`
  *
  * 【之后还需要再跑吗】不需要。新照片与「改定位」都由写入链路自己维护
  * （见 PhotosService.syncFromExtra → placeOf），本脚本只为补历史数据而存在。
- * 重复执行也是安全的：GPS 只填空缺；反解按坐标桶归并后逐个进行，同一机位只问一次高德。
+ * 重复执行也是安全的：GPS 与地名都只填空缺；反解按坐标桶归并后逐个进行，同一机位只问一次高德。
  */
 import './env';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import { loadConfig } from '@shaping-memory/config';
 import { createDb, exifMetadata } from '@shaping-memory/db';
 import type { ExifFull } from '@shaping-memory/exif';
 import { reverseGeocode } from './geo/regeo';
+import { placeIsEmpty } from './geo/place-candidates';
 import { displayPatchOf } from './photos/exif-sync';
 
 /** 与 regeo 的缓存桶精度一致（4 位小数约 11 米）：归并口径不同会让缓存白建 */
@@ -36,7 +38,11 @@ async function main(): Promise<void> {
       alt: exifMetadata.gpsAlt,
       extra: exifMetadata.extra,
     })
-    .from(exifMetadata);
+    .from(exifMetadata)
+    /* 只取仍需处理的行：地名为空（待反解）或 GPS 尚未落列（待从 EXIF 原文补坐标）；
+       两项都已就绪的行无事可做，跳过后重复执行的开销随完成度递减。
+       「地名为空」的判定与批量补地名接口共用一份（见 geo/place-candidates）。 */
+    .where(or(placeIsEmpty(), isNull(exifMetadata.gpsLat), isNull(exifMetadata.gpsLon)));
 
   /* 先按坐标桶归并：一处机位往往躺着几十张照片，逐张反解是白花配额。
      归并后每个机位只发一次请求，结果一次写给桶里的所有照片。 */
@@ -81,7 +87,8 @@ async function main(): Promise<void> {
       await db
         .update(exifMetadata)
         .set({ place: place.label, province: place.province, city: place.city })
-        .where(eq(exifMetadata.mediaId, id));
+        // 只补空缺（与异步队列同口径）：已有地名不覆盖，需要覆盖请走后台单张「获取地名」
+        .where(and(eq(exifMetadata.mediaId, id), placeIsEmpty()));
     }
     resolved += bucket.ids.length;
     // eslint-disable-next-line no-console
